@@ -304,6 +304,7 @@ struct MapCanvasView: View {
         HStack(alignment: .bottom) {
             Text("X \(coordinate(center.x))  Y \(coordinate(center.y))")
                 .font(.system(size: 9, design: .monospaced))
+                .accessibilityIdentifier("mapCoordinates")
                 .padding(5)
                 .background(.white.opacity(0.88), in: RoundedRectangle(cornerRadius: 5))
             Spacer(minLength: 4)

@@ -37,6 +37,7 @@ jobs:
           name: HelloYrq-test-results
           path: |
             build/*.log
+            build/test-summary.json
             build/binary-info.txt
             build/HelloYrq.xcresult
             build/screenshots

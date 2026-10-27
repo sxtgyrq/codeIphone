@@ -18,6 +18,10 @@ final class HelloYrqUITests: XCTestCase {
         user.tap(); user.typeText("demo")
         let password = app.secureTextFields["password"]
         password.tap(); password.typeText("test-password\n")
+        // iOS Password AutoFill presents this system sheet inside the app after
+        // a successful login. Dismiss it as a user would before testing the map.
+        let notNow = app.buttons.matching(NSPredicate(format: "label IN %@", ["Not Now", "暂不"])).firstMatch
+        if notNow.waitForExistence(timeout: 5) { notNow.tap() }
     }
 
     private func screenshot(_ app: XCUIApplication, _ name: String) {
@@ -44,11 +48,19 @@ final class HelloYrqUITests: XCTestCase {
         screenshot(app, "逻辑地图")
         app.buttons["fitMap"].tap()
         let canvas = app.descendants(matching: .any)["logicMap"].firstMatch
-        if canvas.exists { canvas.pinch(withScale: 2, velocity: 1); canvas.swipeLeft() }
+        XCTAssertTrue(canvas.waitForExistence(timeout: 5))
+        let coordinates = app.staticTexts["mapCoordinates"]
+        XCTAssertTrue(coordinates.exists)
+        let oldCoordinates = coordinates.label
+        canvas.pinch(withScale: 2, velocity: 1)
+        canvas.swipeLeft()
+        let moved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", oldCoordinates), object: coordinates)
+        XCTAssertEqual(XCTWaiter.wait(for: [moved], timeout: 5), .completed)
         app.buttons["refreshMap"].tap()
-        XCTAssertTrue(counts.waitForExistence(timeout: 10))
+        let updated = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "线路 2 · LN 7 · Cross 1"), object: counts)
+        XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 10), .completed)
         app.buttons["nodesButton"].tap()
-        XCTAssertTrue(app.navigationBars["逻辑节点 · 6"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["逻辑节点 · 7"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["¬(?)"].exists)
         screenshot(app, "逻辑节点列表")
     }

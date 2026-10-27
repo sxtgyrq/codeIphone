@@ -53,7 +53,16 @@ private final class MapUITestProtocol: URLProtocol {
         switch path {
         case "GetAllLineData": envelope(data: empty ? [] : Self.lines)
         case "GetAllCrossData": envelope(data: empty ? [] : Self.crosses)
-        case "GetLogicalNodes": envelope(data: empty ? [] : Self.nodes)
+        case "GetLogicalNodes":
+            Self.lock.lock(); let reads = Self.lineReads; Self.lock.unlock()
+            var result = empty ? [] : Self.nodes
+            if scenario == "success" && reads > 1 {
+                result.append(["code": "IIIIIIIIII", "owner": "demo", "version": 1,
+                               "x": 300.5, "y": 160.5, "sideLength": 12,
+                               "properties": ["value": "刷新新增", "info": "", "logicLanguage": "第二次读取", "operandKind": "Custom"],
+                               "positions": [], "canEdit": true])
+            }
+            envelope(data: result)
         case "Logout": envelope(data: true)
         default: envelope(success: false, data: NSNull(), status: 404, code: "UnexpectedEndpoint", message: "Unexpected test request")
         }

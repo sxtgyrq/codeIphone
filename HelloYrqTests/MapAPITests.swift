@@ -151,6 +151,66 @@ final class MapAPITests: XCTestCase {
         XCTAssertEqual(scenario.remainingCount, 0)
     }
 
+    func testInvalidLineCoordinatesOwnershipAndOrderRejectMapBeforeDisplay() async {
+        let invalidLines = [
+            Self.lineJSON.replacingOccurrences(of: #""x":90"#, with: #""x":-1"#),
+            Self.lineJSON.replacingOccurrences(of: #""x":130"#, with: #""x":500001"#),
+            Self.lineJSON.replacingOccurrences(of: #""y":110"#, with: #""y":500001"#),
+            Self.lineJSON.replacingOccurrences(of: #""lineCode":"ZZZZZZZZZZ""#, with: #""lineCode":"AAAAAAAAAA""#),
+            Self.lineJSON.replacingOccurrences(of: #""order":0"#, with: #""order":1"#),
+            Self.lineJSON.replacingOccurrences(of: #""order":1"#, with: #""order":2"#)
+        ]
+        for invalid in invalidLines {
+            let scenario = script([.init("GetAllLineData", envelope("[\(invalid)]")),
+                                   .init("GetAllCrossData", envelope("[]")), .init("GetLogicalNodes", envelope("[]"))])
+            await assertError("InvalidResponse") { _ = try await self.api.loadMap(session: self.account) }
+            XCTAssertEqual(scenario.remainingCount, 0)
+        }
+    }
+
+    func testInvalidLogicalNodeCentersSizeAndFullBoundsRejectMapBeforeDisplay() async {
+        let invalidNodes = [
+            Self.nodeJSON.replacingOccurrences(of: #""x":110.5"#, with: #""x":110"#),
+            Self.nodeJSON.replacingOccurrences(of: #""y":110.5"#, with: #""y":110.25"#),
+            Self.nodeJSON.replacingOccurrences(of: #""x":110.5"#, with: #""x":-0.5"#),
+            Self.nodeJSON.replacingOccurrences(of: #""x":110.5"#, with: #""x":500000.5"#),
+            Self.nodeJSON.replacingOccurrences(of: #""x":110.5"#, with: #""x":2.5"#),
+            Self.nodeJSON.replacingOccurrences(of: #""y":110.5"#, with: #""y":499997.5"#),
+            Self.nodeJSON.replacingOccurrences(of: #""sideLength":8"#, with: #""sideLength":0"#),
+            Self.nodeJSON.replacingOccurrences(of: #""sideLength":8"#, with: #""sideLength":7"#),
+            Self.nodeJSON.replacingOccurrences(of: #""sideLength":8"#, with: #""sideLength":20"#)
+        ]
+        for invalid in invalidNodes {
+            let scenario = script([.init("GetAllLineData", envelope("[]")), .init("GetAllCrossData", envelope("[]")),
+                                   .init("GetLogicalNodes", envelope("[\(invalid)]"))])
+            await assertError("InvalidResponse") { _ = try await self.api.loadMap(session: self.account) }
+            XCTAssertEqual(scenario.remainingCount, 0)
+        }
+        for invalid in [Double.nan, .infinity, -.infinity] {
+            XCTAssertFalse(MapLogicalNode(code: "BBBBBBBBBB", owner: "owner", version: 1,
+                                          x: invalid, y: 110.5, sideLength: 8).isValidGeometry)
+            XCTAssertFalse(MapLogicalNode(code: "BBBBBBBBBB", owner: "owner", version: 1,
+                                          x: 110.5, y: invalid, sideLength: 8).isValidGeometry)
+        }
+    }
+
+    func testEmptyDraftLineAndAllNodeSizesKeepLegacyTextCompatible() async throws {
+        let draft = #"{"code":"ZZZZZZZZZZ","owner":"测试用户","isLocked":false,"version":1,"nodes":[],"properties":{"roadName":"旧线路"}}"#
+        for size in [4, 6, 8, 10, 12, 18] {
+            let node = Self.nodeJSON.replacingOccurrences(of: #""sideLength":8"#, with: "\"sideLength\":\(size)")
+                .replacingOccurrences(of: #""value":"¬""#, with: #""value":"历史文本保留""#)
+                .replacingOccurrences(of: #""logicLanguage":"¬(?)""#, with: #""logicLanguage":"旧逻辑语言""#)
+            let scenario = script([.init("GetAllLineData", envelope("[\(draft)]")), .init("GetAllCrossData", envelope("[]")),
+                                   .init("GetLogicalNodes", envelope("[\(node)]"))])
+            let map = try await api.loadMap(session: account)
+            XCTAssertTrue(map.lines[0].nodes.isEmpty)
+            XCTAssertEqual(map.logicalNodes[0].sideLength, size)
+            XCTAssertEqual(map.logicalNodes[0].properties.value, "历史文本保留")
+            XCTAssertEqual(map.logicalNodes[0].properties.logicLanguage, "旧逻辑语言")
+            XCTAssertEqual(scenario.remainingCount, 0)
+        }
+    }
+
     func testBusinessErrorIsDecodedBeforeItsUnexpectedDataShape() async {
         let scenario = script([.init("Logout", #"{"success":false,"code":"MapBusy","message":"稍后重试","data":[1,2]}"#)])
         do { try await api.logout(session: account); XCTFail("Expected business error.") }

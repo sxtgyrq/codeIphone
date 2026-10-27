@@ -48,6 +48,14 @@ struct MapLine: Codable, Hashable, Identifiable, Sendable {
     var properties = MapLineProperties()
 
     var id: String { code }
+    var isValidGeometry: Bool {
+        // Empty draft lines are valid. Every saved point must belong to this
+        // line and retain the contiguous order expected by the native canvas.
+        nodes.enumerated().allSatisfy { entry in
+            entry.element.lineCode == code && entry.element.order == entry.offset &&
+                (0...500_000).contains(entry.element.x) && (0...500_000).contains(entry.element.y)
+        }
+    }
 }
 
 extension MapLine {
@@ -141,6 +149,12 @@ struct MapLogicalNode: Codable, Hashable, Identifiable, Sendable {
     var right: Double { x + Double(sideLength) / 2 }
     var bottom: Double { y - Double(sideLength) / 2 }
     var top: Double { y + Double(sideLength) / 2 }
+    var isValidGeometry: Bool {
+        x.isFinite && y.isFinite &&
+            x.truncatingRemainder(dividingBy: 1) == 0.5 && y.truncatingRemainder(dividingBy: 1) == 0.5 &&
+            [4, 6, 8, 10, 12, 18].contains(sideLength) &&
+            left >= 0 && bottom >= 0 && right <= 500_000 && top <= 500_000
+    }
 }
 
 extension MapLogicalNode {

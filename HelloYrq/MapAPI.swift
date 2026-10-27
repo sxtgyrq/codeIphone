@@ -79,7 +79,8 @@ struct MapAPI {
         let nodes: [MapLogicalNode] = try await post("GetLogicalNodes", body: mapSession)
         guard Set(lines.map(\.code)).count == lines.count,
               Set(nodes.map(\.code)).count == nodes.count,
-              Set(crosses.map(\.key)).count == crosses.count else { throw invalidResponse() }
+              Set(crosses.map(\.key)).count == crosses.count,
+              lines.allSatisfy(\.isValidGeometry), nodes.allSatisfy(\.isValidGeometry) else { throw invalidResponse() }
         // The server reads are separate transactions. Do not reject a concurrent
         // map edit merely because a returned Cross's road is absent in another read.
         return MapSnapshot(lines: lines, logicalNodes: nodes, crosses: crosses)

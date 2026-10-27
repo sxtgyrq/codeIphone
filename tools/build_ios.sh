@@ -29,17 +29,24 @@ unzip -t build/HelloYrq-unsigned.ipa
 
 SIMULATOR_ID="$(python3 tools/select_simulator.py)"
 echo "Running native API and UI tests on simulator: $SIMULATOR_ID"
+test_status=0
 xcodebuild \
   -project HelloYrq.xcodeproj -scheme HelloYrq -configuration Debug \
   -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
   -derivedDataPath build/simulator -resultBundlePath build/HelloYrq.xcresult \
   -parallel-testing-enabled NO \
-  test 2>&1 | tee build/simulator-test.log
+  test 2>&1 | tee build/simulator-test.log || test_status=$?
 
 # The screenshot is also retained inside the xcresult if this optional export
 # command is unavailable on a particular Xcode version.
 if ! xcrun xcresulttool export attachments --path build/HelloYrq.xcresult --output-path build/screenshots; then
   echo 'Screenshot export unavailable; open HelloYrq.xcresult to view the attachment.'
+fi
+if ! xcrun xcresulttool get test-results summary --path build/HelloYrq.xcresult > build/test-summary.json; then
+  echo 'Summary export unavailable; inspect the xcresult and simulator-test.log.'
+fi
+if [ "$test_status" -ne 0 ]; then
+  exit "$test_status"
 fi
 printf '\nNative device build and iPhone simulator API/UI tests passed.\n'
 printf 'IPA: build/HelloYrq-unsigned.ipa (requires local signing).\n'
