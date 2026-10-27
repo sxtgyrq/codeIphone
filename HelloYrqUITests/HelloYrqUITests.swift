@@ -63,6 +63,10 @@ final class HelloYrqUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["逻辑节点 · 7"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["¬(?)"].exists)
         screenshot(app, "逻辑节点列表")
+        app.staticTexts["¬(?)"].tap()
+        XCTAssertTrue(app.navigationBars["对象详情"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["¬(?)"].exists)
+        screenshot(app, "NOT 节点详情")
     }
 
     func testInvalidPasswordStaysOnLogin() {

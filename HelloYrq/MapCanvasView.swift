@@ -54,6 +54,7 @@ struct MapCanvasView: View {
                 })
                 .accessibilityLabel("只读逻辑地图，\(snapshot.lines.count) 条线路，\(snapshot.logicalNodes.count) 个逻辑节点")
                 .accessibilityHint("单指拖动平移，双指捏合缩放，轻点对象查看资料。")
+                .accessibilityIdentifier("logicMap")
                 .accessibilityAction(named: Text("查看全部")) { fit(in: geometry.size) }
 
                 scaleOverlay(transform: transform)

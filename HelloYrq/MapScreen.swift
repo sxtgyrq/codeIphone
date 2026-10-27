@@ -19,7 +19,6 @@ struct MapScreen: View {
                         MapCanvasView(snapshot: map, showArrows: showArrows, showLabels: showLabels,
                                       showCrosses: showCrosses, fitRequest: fitRequest,
                                       onSelect: { selection = $0 })
-                            .accessibilityIdentifier("logicMap")
                         if map.lines.allSatisfy({ $0.nodes.isEmpty }) && map.logicalNodes.isEmpty {
                             VStack(spacing: 10) {
                                 Image(systemName: "square.dashed").font(.largeTitle)
@@ -102,17 +101,26 @@ struct MapScreen: View {
 
     private var controls: some View {
         HStack {
-            Button { fitRequest += 1 } label: { Label("查看全部", systemImage: "arrow.up.left.and.arrow.down.right") }
+            Button { fitRequest += 1 } label: {
+                Label("查看全部", systemImage: "arrow.up.left.and.arrow.down.right")
+                    .frame(minHeight: 44).contentShape(Rectangle())
+            }
                 .disabled(model.snapshot == nil).accessibilityIdentifier("fitMap")
             Spacer()
-            Button { model.refresh() } label: { Label("刷新", systemImage: "arrow.clockwise") }
+            Button { model.refresh() } label: {
+                Label("刷新", systemImage: "arrow.clockwise")
+                    .frame(minHeight: 44).contentShape(Rectangle())
+            }
                 .disabled(model.isWorking).accessibilityIdentifier("refreshMap")
             Spacer()
             Menu {
                 Toggle("线路箭头", isOn: $showArrows)
                 Toggle("LN 标签", isOn: $showLabels)
                 Toggle("Cross 交点", isOn: $showCrosses)
-            } label: { Label("显示", systemImage: "slider.horizontal.3") }
+            } label: {
+                Label("显示", systemImage: "slider.horizontal.3")
+                    .frame(minHeight: 44).contentShape(Rectangle())
+            }
             .accessibilityIdentifier("displayMenu")
         }
         .font(.subheadline).padding(.horizontal, 18).frame(minHeight: 54)
