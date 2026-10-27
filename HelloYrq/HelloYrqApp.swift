@@ -1,22 +1,16 @@
 import SwiftUI
 
 @main
+@MainActor
 struct HelloYrqApp: App {
+    @StateObject private var model = MapViewModel.applicationModel()
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            Group {
+                if model.session == nil { MapLoginView(model: model) }
+                else { MapScreen(model: model) }
+            }
+            .tint(.indigo)
         }
-    }
-}
-
-struct ContentView: View {
-    var body: some View {
-        Text("你好，要瑞卿")
-            .font(.largeTitle.weight(.semibold))
-            .multilineTextAlignment(.center)
-            .padding(24)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(uiColor: .systemBackground))
-            .accessibilityIdentifier("greeting")
     }
 }

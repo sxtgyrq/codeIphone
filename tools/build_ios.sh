@@ -28,7 +28,7 @@ ditto "$APP" build/package/Payload/HelloYrq.app
 unzip -t build/HelloYrq-unsigned.ipa
 
 SIMULATOR_ID="$(python3 tools/select_simulator.py)"
-echo "Running native UI launch test on simulator: $SIMULATOR_ID"
+echo "Running native API and UI tests on simulator: $SIMULATOR_ID"
 xcodebuild \
   -project HelloYrq.xcodeproj -scheme HelloYrq -configuration Debug \
   -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
@@ -41,5 +41,5 @@ xcodebuild \
 if ! xcrun xcresulttool export attachments --path build/HelloYrq.xcresult --output-path build/screenshots; then
   echo 'Screenshot export unavailable; open HelloYrq.xcresult to view the attachment.'
 fi
-printf '\nNative device build and iPhone simulator launch test both passed.\n'
+printf '\nNative device build and iPhone simulator API/UI tests passed.\n'
 printf 'IPA: build/HelloYrq-unsigned.ipa (requires local signing).\n'

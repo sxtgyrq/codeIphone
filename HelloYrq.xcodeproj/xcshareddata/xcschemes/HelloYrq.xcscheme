@@ -5,10 +5,19 @@
       <BuildActionEntry buildForTesting="YES" buildForRunning="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">
         <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="86BA9A7A5309BF85EA2B00ED" BuildableName="HelloYrq.app" BlueprintName="HelloYrq" ReferencedContainer="container:HelloYrq.xcodeproj" />
       </BuildActionEntry>
+      <BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="YES">
+        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="70A4DBBD5C3881D3B88A4ECE" BuildableName="HelloYrqTests.xctest" BlueprintName="HelloYrqTests" ReferencedContainer="container:HelloYrq.xcodeproj" />
+      </BuildActionEntry>
+      <BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="YES">
+        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="B18AA5E6948E47F1AA4FB13F" BuildableName="HelloYrqUITests.xctest" BlueprintName="HelloYrqUITests" ReferencedContainer="container:HelloYrq.xcodeproj" />
+      </BuildActionEntry>
     </BuildActionEntries>
   </BuildAction>
   <TestAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv="YES">
     <Testables>
+      <TestableReference skipped="NO" parallelizable="NO">
+        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="70A4DBBD5C3881D3B88A4ECE" BuildableName="HelloYrqTests.xctest" BlueprintName="HelloYrqTests" ReferencedContainer="container:HelloYrq.xcodeproj" />
+      </TestableReference>
       <TestableReference skipped="NO">
         <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="B18AA5E6948E47F1AA4FB13F" BuildableName="HelloYrqUITests.xctest" BlueprintName="HelloYrqUITests" ReferencedContainer="container:HelloYrq.xcodeproj" />
       </TestableReference>
