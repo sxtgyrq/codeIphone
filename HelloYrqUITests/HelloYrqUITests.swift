@@ -53,6 +53,7 @@ final class HelloYrqUITests: XCTestCase {
         XCTAssertTrue(coordinates.exists)
         let oldCoordinates = coordinates.label
         canvas.pinch(withScale: 2, velocity: 1)
+        screenshot(app, "放大后的逻辑地图")
         canvas.swipeLeft()
         let moved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", oldCoordinates), object: coordinates)
         XCTAssertEqual(XCTWaiter.wait(for: [moved], timeout: 5), .completed)

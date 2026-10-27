@@ -143,7 +143,14 @@ struct MapCanvasView: View {
             }
         }
         if showLabels {
-            for node in snapshot.logicalNodes { drawLabel(node, context: &context, transform: transform) }
+            var occupied: [CGRect] = []
+            // Reserve the selected label first; stable order avoids flicker on refresh.
+            let nodes = snapshot.logicalNodes.sorted {
+                let firstSelected = selectedID == MapSelection.logicalNode($0).id
+                let secondSelected = selectedID == MapSelection.logicalNode($1).id
+                return firstSelected == secondSelected ? $0.code < $1.code : firstSelected
+            }
+            for node in nodes { drawLabel(node, context: &context, transform: transform, occupied: &occupied) }
         }
     }
 
@@ -232,27 +239,54 @@ struct MapCanvasView: View {
         }
     }
 
-    private func drawLabel(_ node: MapLogicalNode, context: inout GraphicsContext, transform: MapTransform) {
+    private func drawLabel(_ node: MapLogicalNode, context: inout GraphicsContext, transform: MapTransform, occupied: inout [CGRect]) {
         guard node.x.isFinite, node.y.isFinite else { return }
         let rect = nodeRect(node, transform: transform)
         let chosen = selectedID == MapSelection.logicalNode(node).id
-        guard rect.width >= 9 || chosen else { return }
-        let labelArea = CGRect(x: rect.midX - 90, y: rect.midY + 4, width: 180, height: 100)
-        guard labelArea.intersects(CGRect(origin: .zero, size: transform.size)) else { return }
-        var parts = [shortened(node.properties.value, limit: 36)]
-        if !node.properties.logicLanguage.isEmpty {
-            parts.append(shortened(node.properties.logicLanguage, limit: 72))
+        guard rect.width >= 4 || chosen else { return }
+        let screen = CGRect(origin: .zero, size: transform.size)
+        guard rect.insetBy(dx: -12, dy: -12).intersects(screen) else { return }
+        // Keep labels clear of the coordinate/scale strip. This affects drawing only.
+        let viewport = CGRect(x: 7, y: 7, width: max(0, screen.width - 14), height: max(0, screen.height - 48))
+        let overview = transform.scale < 2.5 && !chosen
+        let detailed = transform.scale >= 6 || chosen
+        let value = node.properties.value.isEmpty ? (node.sideLength == 18 ? "开始" : node.code) : node.properties.value
+        let compact = shortened(value, limit: 6)
+        var parts = [overview ? compact : shortened(value, limit: detailed ? 36 : 18)]
+        if !overview && !node.properties.logicLanguage.isEmpty && node.properties.logicLanguage != node.properties.value {
+            parts.append(shortened(node.properties.logicLanguage, limit: detailed ? 160 : 48))
         }
-        if node.sideLength == 18 && parts[0].isEmpty { parts[0] = "开始" }
-        let label = Text(parts.joined(separator: "\n"))
-            .font(.system(size: 11))
-            .foregroundColor(Color(red: 0.10, green: 0.19, blue: 0.31))
-        let resolved = context.resolve(label)
-        let width = min(180, max(74, rect.width))
-        let measured = resolved.measure(in: CGSize(width: width, height: 150))
-        let destination = CGRect(x: rect.midX - measured.width / 2, y: rect.midY + 4, width: measured.width, height: measured.height)
-        context.fill(Path(roundedRect: destination.insetBy(dx: -3, dy: -2), cornerRadius: 3), with: .color(.white.opacity(0.82)))
-        context.draw(resolved, in: destination)
+        let text = parts.joined(separator: "\n")
+        let variants = text == compact ? [text] : [text, compact]
+        for content in variants {
+            let label = Text(content)
+                .font(.system(size: overview ? 10 : 11))
+                .foregroundColor(Color(red: 0.10, green: 0.19, blue: 0.31))
+            let resolved = context.resolve(label)
+            let width = min(viewport.width - 6, overview ? 72 : detailed ? 220 : 140)
+            guard width > 0 else { return }
+            let measured = resolved.measure(in: CGSize(width: width, height: .greatestFiniteMagnitude))
+            guard measured.width > 0, measured.height > 0,
+                  measured.width + 6 <= viewport.width, measured.height + 4 <= viewport.height else { continue }
+            let x = min(viewport.maxX - measured.width - 3, max(viewport.minX + 3, rect.midX - measured.width / 2))
+            var candidates = [
+                CGRect(x: x, y: rect.maxY + 6, width: measured.width, height: measured.height),
+                CGRect(x: x, y: rect.minY - measured.height - 6, width: measured.width, height: measured.height)
+            ]
+            if chosen {
+                let y = min(viewport.maxY - measured.height - 2, max(viewport.minY + 2, rect.maxY + 6))
+                candidates.append(CGRect(x: x, y: y, width: measured.width, height: measured.height))
+            }
+            for destination in candidates {
+                let background = destination.insetBy(dx: -3, dy: -2)
+                guard viewport.contains(background), !occupied.contains(where: { $0.intersects(background) }) else { continue }
+                context.fill(Path(roundedRect: background, cornerRadius: 3), with: .color(.white.opacity(0.88)))
+                context.draw(resolved, in: destination)
+                occupied.append(background.insetBy(dx: -3, dy: -3))
+                return
+            }
+        }
+        // Dense regions omit a label instead of covering another; details retain the full text.
     }
 
     private func drawCross(_ cross: MapCross, context: inout GraphicsContext, transform: MapTransform) {
