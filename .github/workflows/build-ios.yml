@@ -1,0 +1,44 @@
+name: Build native iPhone app
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master, 'codex/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-launch:
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate project files
+        run: python3 -m unittest discover -s Tests -v
+      - name: Build device IPA and launch native iPhone simulator app
+        run: bash tools/build_ios.sh
+      - name: Downloadable IPA (requires Windows signing)
+        uses: actions/upload-artifact@v4
+        with:
+          name: HelloYrq-unsigned-ipa
+          path: build/HelloYrq-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
+      - name: Simulator screenshot and test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HelloYrq-test-results
+          path: |
+            build/*.log
+            build/binary-info.txt
+            build/HelloYrq.xcresult
+            build/screenshots
+          if-no-files-found: warn
+          retention-days: 14
