@@ -33,8 +33,11 @@ struct MapLinePropertiesEditor: View {
         NavigationStack {
             Form {
                 Section("线路资料") {
-                    TextField("线路名称（最多 15 字符）", text: $roadName)
-                        .accessibilityIdentifier("lineName")
+                    HStack {
+                        TextField("线路名称（最多 15 字符）", text: $roadName)
+                            .accessibilityIdentifier("lineName")
+                        clearButton("线路名称", text: $roadName, identifier: "lineName")
+                    }
                     TextField("说明（最多 127 字符）", text: $roadDetail, axis: .vertical)
                         .lineLimit(3...6).accessibilityIdentifier("lineDetail")
                 }
@@ -47,6 +50,7 @@ struct MapLinePropertiesEditor: View {
                         TextField("5…500", text: $speed)
                             .keyboardType(.numberPad).multilineTextAlignment(.trailing)
                             .frame(maxWidth: 100).accessibilityIdentifier("lineSpeed")
+                        clearButton("速度", text: $speed, identifier: "lineSpeed")
                     }
                     Text(twoWay ? "两个方向均可通行，按相反方向显示成对箭头。" : "沿节点顺序单向通行。需要改变方向时，使用线路菜单中的“反转方向”。")
                         .font(.footnote).foregroundStyle(.secondary)
@@ -81,6 +85,12 @@ struct MapLinePropertiesEditor: View {
             }
             .interactiveDismissDisabled(isSaving)
         }
+    }
+
+    private func clearButton(_ title: String, text: Binding<String>, identifier: String) -> some View {
+        Button { text.wrappedValue = "" } label: {
+            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary).frame(width: 44, height: 44)
+        }.buttonStyle(.borderless).accessibilityLabel("清空 " + title).accessibilityIdentifier("clear-" + identifier)
     }
 
     private func save() {

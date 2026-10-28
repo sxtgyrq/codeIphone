@@ -65,13 +65,11 @@ final class MapEditingUITests: XCTestCase {
     private func replace(_ field: XCUIElement, with value: String) {
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap()
-        // Place the insertion caret after the existing text, including the
-        // right-aligned numeric fields, before deleting the complete value.
-        field.coordinate(withNormalizedOffset: CGVector(dx: 0.999, dy: 0.5)).tap()
+        // Callers use the form's explicit Clear control first. Empty UIKit
+        // text fields can expose their placeholder as the accessibility value.
         let old = field.value as? String ?? ""
-        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count) + value)
-        // Catch a misplaced insertion caret here, rather than misreporting the
-        // application's correct rejection of e.g. "600.5177.5" as a save failure.
+        XCTAssertTrue(old.isEmpty || old == field.placeholderValue, "Clear the field before entering its replacement")
+        field.typeText(value)
         XCTAssertEqual(field.value as? String, value, "The field must contain only the replacement text")
     }
 
@@ -116,7 +114,9 @@ final class MapEditingUITests: XCTestCase {
         tap(app, "saveDraft")
         expectCounts(app, lines: 3, nodes: 6, crosses: 1)
         tap(app, "selectedMore"); tap(app, "lineProperties")
+        tap(app, "clear-lineName")
         replace(app.textFields["lineName"], with: "触摸测试")
+        tap(app, "clear-lineSpeed")
         replace(app.textFields["lineSpeed"], with: "120")
         reveal(app, app.switches["lineTwoWay"])
         app.switches["lineTwoWay"].tap()
@@ -256,13 +256,14 @@ final class MapEditingUITests: XCTestCase {
         tap(app, "moreTools"); tap(app, "导入流程图")
         let json = #"{"format":"argumentmap.flow/1","origin":"p","ln":[{"id":"p","at":[100.5,100.5],"size":6,"value":"Imported","logic":"UI_FLOW_PROP"}],"roads":[{"id":"r","points":[[90,100],[110,100]],"name":"Flow"}],"crosses":[]}"#
         let editor = app.textViews["flowJSON"]
+        tap(app, "clear-flowJSON")
         reveal(app, editor)
         XCTAssertTrue(editor.exists)
-        editor.tap(); editor.typeText(json)
+        replace(editor, with: json)
         XCTAssertFalse(app.buttons["saveFlow"].isEnabled)
         let x = app.textFields["flowOriginX"], y = app.textFields["flowOriginY"]
-        reveal(app, x); replace(x, with: "700.5")
-        reveal(app, y); replace(y, with: "500.5")
+        tap(app, "clear-flowOriginX"); replace(x, with: "700.5")
+        tap(app, "clear-flowOriginY"); replace(y, with: "500.5")
         tap(app, "previewFlow")
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: app.buttons["saveFlow"])
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
@@ -285,6 +286,10 @@ final class MapEditingUITests: XCTestCase {
         // The native PasteButton reads the JSON copied by the app, exercising
         // the same clipboard route used for WPF/iOS exchange.
         tap(app, "moreTools"); tap(app, "pasteSystemClipboard")
+        let pasted = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"),
+                                               object: app.navigationBars["地图工具"])
+        XCTAssertEqual(XCTWaiter.wait(for: [pasted], timeout: 10), .completed,
+                       "The system paste callback must close its panel before choosing the new position")
         coordinate(app, "400", "300")
         screenshot(app, "手机整组复制落点预览")
         tap(app, "placementConfirm")

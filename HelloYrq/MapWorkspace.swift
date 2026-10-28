@@ -27,7 +27,7 @@ private enum WorkspaceSheet: Identifiable {
     case coordinates, sizes, points, objects, nodes, help, flow
     case node(MapLogicalNode), newNode(Int, CGPoint), cross(MapCross), properties(MapLine), details(MapSelection)
     case merge(MapLine, MapLine?), connection(MapLogicalNode?, MapLogicalNode?), split(MapLine)
-    case commands(WorkspaceCommands)
+    case commands(WorkspaceCommands, UUID)
     var id: String { String(describing: self) }
 }
 
@@ -60,7 +60,6 @@ struct MapWorkspace: View {
     @State private var confirmationTitle = ""
     @State private var confirmationAction: (() -> Void)?
     @State private var commandAfterDismiss: (() -> Void)?
-    @State private var commandPresentationID = UUID()
 
     private var map: MapSnapshot { model.snapshot ?? .empty }
     private var busy: Bool { model.isWorking || running || commandAfterDismiss != nil }
@@ -329,12 +328,11 @@ struct MapWorkspace: View {
             .disabled(disabled).accessibilityIdentifier(id)
     }
 
-    private func commandPanel(_ commands: WorkspaceCommands) -> some View {
-        let presentationID = commandPresentationID
-        return NavigationStack {
+    private func commandPanel(_ commands: WorkspaceCommands, presentationID: UUID) -> some View {
+        NavigationStack {
             List {
                 switch commands {
-                case .tools: toolCommands(presentationID: presentationID)
+                case .tools: toolCommands
                 case .selected(let item): selectedCommands(item).disabled(busy)
                 case .draft: draftCommands.disabled(busy)
                 case .display: displayCommands
@@ -342,6 +340,9 @@ struct MapWorkspace: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .safeAreaInset(edge: .bottom) {
+                if case .tools = commands { systemPaste(presentationID: presentationID) }
+            }
             .navigationTitle(commands.title).navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -354,7 +355,7 @@ struct MapWorkspace: View {
         .accessibilityIdentifier("commandPanel")
     }
 
-    @ViewBuilder private func toolCommands(presentationID: UUID) -> some View {
+    @ViewBuilder private var toolCommands: some View {
         Section("地图与定位") {
             command("刷新地图（保留草稿）", icon: "arrow.clockwise", disabled: busy) { model.refresh() }
             if let draft, draft.version >= 0 {
@@ -370,17 +371,6 @@ struct MapWorkspace: View {
         Section("粘贴与导入") {
             command("导入流程图", icon: "square.and.arrow.down", disabled: editing || !canWrite) { sheet = .flow }
             command("粘贴", icon: "doc.on.clipboard", disabled: clipboard == nil || editing || !canWrite, action: beginPaste)
-            PasteButton(payloadType: String.self) { values in
-                // Transferable loading can finish after this panel was closed.
-                // A stale result must neither close another editor nor queue a
-                // command without a corresponding dismissal callback.
-                guard presentationID == commandPresentationID,
-                      case .commands(.tools)? = sheet else { return }
-                performCommand { pasteSystem(values.first) }
-            }
-            .labelStyle(MapSystemPasteLabelStyle())
-            .frame(minHeight: 44)
-            .disabled(editing || !canWrite).accessibilityIdentifier("pasteSystemClipboard")
         }
         Section("视图") {
             command("回到地图中心", icon: "location") { interaction.locate(CGPoint(x: 250_000, y: 250_000)) }
@@ -391,6 +381,34 @@ struct MapWorkspace: View {
         Section {
             command("触摸操作指南", icon: "questionmark.circle") { sheet = .help }
         }
+    }
+
+    /// Keep the system paste control outside recycled list rows so its native
+    /// touch handling and asynchronous payload remain attached to this panel.
+    private func systemPaste(presentationID: UUID) -> some View {
+        HStack {
+            Text("从系统剪贴板").font(.subheadline)
+            Spacer()
+            PasteButton(payloadType: String.self) { values in
+                Task { @MainActor in
+                    // Ignore results from a panel that has closed or changed.
+                    let activeID: UUID?
+                    if case .commands(.tools, let currentID)? = sheet { activeID = currentID }
+                    else { activeID = nil }
+                    let matchesPresentation = activeID == presentationID
+                    #if DEBUG
+                    print("System paste callback: generationMatches=\(matchesPresentation), toolsPanelMatches=\(activeID != nil), commandAlreadyQueued=\(commandAfterDismiss != nil)")
+                    #endif
+                    guard matchesPresentation else { return }
+                    performCommand { pasteSystem(values.first) }
+                }
+            }
+            .labelStyle(.titleAndIcon)
+            .frame(minHeight: 44)
+            .disabled(editing || !canWrite).accessibilityIdentifier("pasteSystemClipboard")
+        }
+        .padding(.horizontal, 20).padding(.vertical, 8)
+        .background(.regularMaterial)
     }
 
     @ViewBuilder private func selectedCommands(_ item: MapSelection) -> some View {
@@ -516,8 +534,7 @@ struct MapWorkspace: View {
         sheet = nil
     }
     private func showCommands(_ commands: WorkspaceCommands) {
-        commandPresentationID = UUID()
-        sheet = .commands(commands)
+        sheet = .commands(commands, UUID())
     }
     private func didDismissSheet() {
         guard let action = commandAfterDismiss else { return }
@@ -531,7 +548,7 @@ struct MapWorkspace: View {
 
     @ViewBuilder private func sheetContent(_ item: WorkspaceSheet) -> some View {
         switch item {
-        case .commands(let commands): commandPanel(commands).presentationDetents([.large])
+        case .commands(let commands, let id): commandPanel(commands, presentationID: id).presentationDetents([.large])
         case .coordinates:
             MapCoordinateEditor(point: interaction.cursor) { interaction.locate($0) }.presentationDetents([.medium, .large])
         case .help: MapTouchGuide()
@@ -916,11 +933,5 @@ struct MapWorkspace: View {
     }
     private var placementButton: String {
         switch placement { case .areaFirst: return "确定第一个角"; case .areaSecond: return "完成框选"; default: return "确认落点" }
-    }
-}
-
-private struct MapSystemPasteLabelStyle: LabelStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        Label("从系统剪贴板粘贴", systemImage: "doc.on.clipboard")
     }
 }

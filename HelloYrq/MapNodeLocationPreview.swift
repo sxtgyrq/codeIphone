@@ -108,7 +108,6 @@ struct MapNodeLocationPreview: View {
                     Button("返回编辑") { dismiss() }.frame(minHeight: 44).accessibilityIdentifier("returnToNodeEditor")
                 }
             }
-            .accessibilityIdentifier("nodeLocationPreview")
         }
     }
 

@@ -328,6 +328,13 @@ struct MapFlowImportEditor: View {
                         Button { showFileImporter = true } label: { Label("从文件导入", systemImage: "doc") }
                             .frame(minHeight: 44).accessibilityIdentifier("openFlowFile")
                     }
+                    HStack {
+                        Text("JSON 文本").font(.subheadline)
+                        Spacer()
+                        Button("清空") { replaceText("") }
+                            .buttonStyle(.borderless).frame(minHeight: 44)
+                            .accessibilityLabel("清空流程图 JSON").accessibilityIdentifier("clear-flowJSON")
+                    }
                     TextEditor(text: $text).font(.system(.footnote, design: .monospaced))
                         .frame(minHeight: 170).textInputAutocapitalization(.never).autocorrectionDisabled()
                         .accessibilityLabel("流程图 JSON").accessibilityIdentifier("flowJSON")
@@ -393,6 +400,9 @@ struct MapFlowImportEditor: View {
             Spacer()
             TextField("整数 + 0.5", text: value).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                 .frame(maxWidth: 160).accessibilityIdentifier(id)
+            Button { value.wrappedValue = "" } label: {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary).frame(width: 44, height: 44)
+            }.buttonStyle(.borderless).accessibilityLabel("清空 " + title).accessibilityIdentifier("clear-" + id)
         }
     }
     private func invalidate() { preview = nil; previewInput = nil; errorMessage = nil }
