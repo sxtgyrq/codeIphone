@@ -67,16 +67,21 @@ final class MapEditingUITests: XCTestCase {
         field.tap()
         // Place the insertion caret after the existing text, including the
         // right-aligned numeric fields, before deleting the complete value.
-        field.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.999, dy: 0.5)).tap()
         let old = field.value as? String ?? ""
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count) + value)
+        // Catch a misplaced insertion caret here, rather than misreporting the
+        // application's correct rejection of e.g. "600.5177.5" as a save failure.
+        XCTAssertEqual(field.value as? String, value, "The field must contain only the replacement text")
     }
 
     private func coordinate(_ app: XCUIApplication, _ x: String, _ y: String) {
         tap(app, "coordinatesButton")
         let xField = app.textFields["cursorX"].exists ? app.textFields["cursorX"] : app.textFields["X"]
         let yField = app.textFields["cursorY"].exists ? app.textFields["cursorY"] : app.textFields["Y"]
+        tap(app, "clear-cursorX")
         replace(xField, with: x)
+        tap(app, "clear-cursorY")
         replace(yField, with: y)
         tap(app, "applyCoordinates")
         XCTAssertTrue(app.buttons["coordinatesButton"].waitForExistence(timeout: 5))

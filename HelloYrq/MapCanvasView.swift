@@ -28,9 +28,20 @@ struct MapCanvasView: View {
     var onSelect: (MapSelection?) -> Void
     var onPoint: ((CGPoint) -> Void)? = nil
 
-    @State private var center = CGPoint(x: 250_000, y: 250_000)
-    @State private var scale: CGFloat = 1
-    @State private var hasFitted = false
+    // The document owns the viewport so refreshing content or changing dock
+    // layout never replaces it with the initial fit of a new Canvas value.
+    private var center: CGPoint {
+        get { interaction.cursor }
+        nonmutating set { interaction.cursor = newValue }
+    }
+    private var scale: CGFloat {
+        get { interaction.currentScale }
+        nonmutating set { interaction.currentScale = newValue }
+    }
+    private var hasFitted: Bool {
+        get { interaction.hasFittedViewport }
+        nonmutating set { interaction.hasFittedViewport = newValue }
+    }
     @State private var dragOrigin: CGPoint?
     @State private var pinchScale: CGFloat?
     private var selectedID: String? { interaction.selectedID }
@@ -80,8 +91,6 @@ struct MapCanvasView: View {
                 if !hasFitted { fit(in: size) }
             }
             .onChange(of: fitRequest) { _ in fit(in: geometry.size) }
-            .onChange(of: center) { interaction.cursor = $0 }
-            .onChange(of: scale) { interaction.currentScale = $0 }
             .onChange(of: interaction.focus?.id) { _ in
                 guard let request = interaction.focus else { return }
                 center = bounded(request.point)
@@ -97,6 +106,7 @@ struct MapCanvasView: View {
     private var panGesture: some Gesture {
         DragGesture(minimumDistance: 6)
             .onChanged { value in
+                guard pinchScale == nil else { return }
                 if dragOrigin == nil { dragOrigin = center }
                 guard let start = dragOrigin else { return }
                 center = bounded(CGPoint(x: start.x - value.translation.width / scale,
@@ -108,7 +118,7 @@ struct MapCanvasView: View {
     private var zoomGesture: some Gesture {
         MagnificationGesture()
             .onChanged { value in
-                if pinchScale == nil { pinchScale = scale }
+                if pinchScale == nil { pinchScale = scale; dragOrigin = nil }
                 guard let initial = pinchScale, value.isFinite, value > 0 else { return }
                 scale = min(MapTransform.maximumScale, max(0.0001, initial * value))
             }

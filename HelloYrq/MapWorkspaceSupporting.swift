@@ -33,6 +33,10 @@ struct MapCoordinateEditor: View {
                 Section("地图中心 / 准星位置") {
                     coordinateField("X", text: $x, identifier: "cursorX")
                     coordinateField("Y", text: $y, identifier: "cursorY")
+                    if point == nil {
+                        Label("请输入 0…500000 之间的有效数字。", systemImage: "exclamationmark.circle")
+                            .font(.footnote).foregroundStyle(.orange)
+                    }
                 }
                 Section {
                     HStack {
@@ -56,7 +60,13 @@ struct MapCoordinateEditor: View {
         }
     }
     private func coordinateField(_ title: String, text: Binding<String>, identifier: String) -> some View {
-        HStack { Text(title).font(.body.monospaced()); TextField(title, text: text).keyboardType(.decimalPad).multilineTextAlignment(.trailing).accessibilityIdentifier(identifier) }
+        HStack {
+            Text(title).font(.body.monospaced())
+            TextField(title, text: text).keyboardType(.decimalPad).multilineTextAlignment(.trailing).accessibilityIdentifier(identifier)
+            Button { text.wrappedValue = "" } label: {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary).frame(width: 44, height: 44)
+            }.buttonStyle(.borderless).accessibilityLabel("清空 " + title).accessibilityIdentifier("clear-" + identifier)
+        }
     }
     private func nudge(_ title: String, icon: String, dx: Double, dy: Double) -> some View {
         Button {

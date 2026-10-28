@@ -34,6 +34,7 @@ final class MapInteraction: ObservableObject {
     @Published var preview: MapSnapshot?
     @Published var continuation: [MapLogicalNodeContinuationPoint] = []
     @Published var currentScale: CGFloat = 1
+    @Published var hasFittedViewport = false
     @Published var region: MapAreaBounds?
     @Published var showProtection = false
     @Published var showSpeeds = false

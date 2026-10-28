@@ -138,14 +138,16 @@ struct MapWorkspace: View {
             } label: { Label("账号", systemImage: "person.crop.circle") }
             .accessibilityIdentifier("accountMenu")
         }
-        ToolbarItemGroup(placement: .navigationBarTrailing) {
+        ToolbarItem(placement: .navigationBarTrailing) {
             Button {
                 if draft != nil { undoDraft() }
                 else { confirm("撤销本账号上一次数据库操作？") { run { try await model.undoLastOperation(); clearOperation() } } }
-            } label: { Image(systemName: "arrow.uturn.backward") }
+            } label: { Image(systemName: "arrow.uturn.backward").frame(width: 44, height: 44) }
             .accessibilityLabel(draft != nil ? "撤回草稿一步" : "撤销上次操作")
             .disabled(busy || (editing && draft == nil) || (draft != nil && history.isEmpty))
             .accessibilityIdentifier("undoMap")
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
             Menu {
                 MapMenuButton("刷新地图（保留草稿）", systemImage: "arrow.clockwise") { model.refresh() }.disabled(busy)
                 if let draft, draft.version >= 0 {
@@ -168,7 +170,7 @@ struct MapWorkspace: View {
                 MapMenuButton(toolsVisible ? "收起工具栏" : "展开工具栏", systemImage: "rectangle.bottomthird.inset.filled") { toolsVisible.toggle() }
                 Divider()
                 MapMenuButton("触摸操作指南", systemImage: "questionmark.circle") { sheet = .help }
-            } label: { Image(systemName: "ellipsis.circle") }.accessibilityLabel("更多").accessibilityIdentifier("moreTools")
+            } label: { Image(systemName: "ellipsis.circle").frame(width: 44, height: 44) }.accessibilityLabel("更多").accessibilityIdentifier("moreTools")
         }
     }
 

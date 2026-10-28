@@ -83,18 +83,23 @@ final class HelloYrqUITests: XCTestCase {
         let scale = app.staticTexts["mapScale"]
         XCTAssertTrue(scale.waitForExistence(timeout: 5))
         let fittedScale = scale.value as? String
+        let coordinates = app.staticTexts["mapCoordinates"]
+        let fittedCoordinates = coordinates.label
+        XCTAssertTrue(fittedCoordinates.contains("101"), "The fixture must be centered on its one-unit lines")
         for _ in 0..<8 {
             if scale.value as? String == "每单位 128 点" { break }
             canvas.pinch(withScale: 3, velocity: 2)
         }
         XCTAssertEqual(scale.value as? String, "每单位 128 点")
         XCTAssertEqual(scale.label, "1 单位")
+        XCTAssertEqual(coordinates.label, fittedCoordinates, "Zoom must keep the short lines in view")
         screenshot(app, "最大放大：1单位网格与短线")
         app.buttons["refreshMap"].tap()
         let refreshed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"),
                                                   object: app.buttons["refreshMap"])
         XCTAssertEqual(XCTWaiter.wait(for: [refreshed], timeout: 10), .completed)
         XCTAssertEqual(scale.value as? String, "每单位 128 点")
+        XCTAssertEqual(coordinates.label, fittedCoordinates, "Refresh must preserve the viewport center")
         canvas.pinch(withScale: 0.5, velocity: -1)
         XCTAssertNotEqual(scale.value as? String, "每单位 128 点")
         app.buttons["fitMap"].tap()
