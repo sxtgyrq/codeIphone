@@ -16,7 +16,7 @@ concurrency:
 jobs:
   build-and-launch:
     runs-on: macos-15
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Validate project files
