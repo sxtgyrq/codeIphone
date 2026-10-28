@@ -20,8 +20,12 @@ extension MapAPI {
 
     func findNodePosition(lineCode: String, version: Int64, nodes: [MapLinePoint], nodeOrder: Int,
                           targetX: Double, targetY: Double, session: MapSession) async throws -> MapNodePositionProposal {
-        try await post("FindNodePosition", body: FindNodeBody(lineCode: lineCode, owner: session.userName,
+        let proposal: MapNodePositionProposal = try await post("FindNodePosition", body: FindNodeBody(lineCode: lineCode, owner: session.userName,
             version: version, nodes: nodes, nodeOrder: nodeOrder, targetX: targetX, targetY: targetY, loginCode: session.loginCode))
+        guard proposal.nodeOrder == nodeOrder, (0...500_000).contains(proposal.x), (0...500_000).contains(proposal.y) else {
+            throw MapAPIError(code: "InvalidResponse", message: "服务端返回了不匹配的节点位置，草稿未更改。请重新定位后再试。")
+        }
+        return proposal
     }
 
     func deleteLine(lineCode: String, version: Int64, session: MapSession) async throws -> Bool {

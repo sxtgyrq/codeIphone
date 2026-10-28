@@ -113,7 +113,7 @@ struct MapLinePointList: View {
                         Text("末端加点").tag(false)
                         Text("前端加点").tag(true)
                     }.pickerStyle(.segmented).accessibilityIdentifier("lineAdditionEnd")
-                    Text("点选节点后回到地图调整位置。向左轻扫可删除；最后点击“校验保存”提交整条线路。")
+                    Text("点选节点后回到地图调整位置。向左轻扫可删除；最后点击“保存线路”提交整条线路。")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("节点 · \(draft.points.count)") {

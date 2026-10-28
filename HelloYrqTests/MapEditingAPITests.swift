@@ -303,6 +303,20 @@ final class MapEditingAPITests: XCTestCase {
         XCTAssertEqual(result.operation, "移动 LN")
     }
 
+    func testPositionProposalMustMatchRequestedNodeAndMapBounds() async {
+        for proposal in [MapNodePositionProposal(nodeOrder: 0, x: 121, y: 110),
+                         MapNodePositionProposal(nodeOrder: 1, x: -1, y: 110),
+                         MapNodePositionProposal(nodeOrder: 1, x: 121, y: 500_001)] {
+            respond(proposal, path: "FindNodePosition")
+            do {
+                _ = try await api.findNodePosition(lineCode: line.code, version: line.version, nodes: line.nodes,
+                                                   nodeOrder: 1, targetX: 121, targetY: 110, session: account)
+                XCTFail("An invalid proposal must not move a different node or leave the map")
+            } catch let error as MapAPIError { XCTAssertEqual(error.code, "InvalidResponse") }
+            catch { XCTFail("Unexpected error: \(error)") }
+        }
+    }
+
     func testVersionConflictAndPermissionErrorsDoNotMasqueradeAsSuccess() async {
         for code in ["VersionConflict", "NotOwner", "LineLocked", "LoginExpired"] {
             MapEditStubProtocol.install { _ in

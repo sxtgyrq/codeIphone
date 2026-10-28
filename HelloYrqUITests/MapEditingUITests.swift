@@ -3,7 +3,7 @@ import XCTest
 /// Touch workflows use the Debug-only, version-checking in-process fixture.
 /// No test connects to or edits the user's real ArgumentMap Server.
 final class MapEditingUITests: XCTestCase {
-    private func launch() -> XCUIApplication {
+    private func launch(captureScreens: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing"]
@@ -11,6 +11,7 @@ final class MapEditingUITests: XCTestCase {
         app.launch()
         let address = app.textFields["serverAddress"]
         XCTAssertTrue(address.waitForExistence(timeout: 10))
+        if captureScreens { screenshot(app, "手机登录页") }
         address.tap(); address.typeText("http://192.168.0.100:61011")
         app.textFields["userName"].tap(); app.textFields["userName"].typeText("demo")
         app.secureTextFields["password"].tap(); app.secureTextFields["password"].typeText("test-password\n")
@@ -26,6 +27,7 @@ final class MapEditingUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15), .completed)
         expectCounts(app, lines: 2, nodes: 6, crosses: 1)
         XCTAssertTrue(app.staticTexts["releaseVersion"].exists)
+        if captureScreens { screenshot(app, "手机地图主页与发布日期") }
         return app
     }
 
@@ -36,19 +38,36 @@ final class MapEditingUITests: XCTestCase {
 
     private func tap(_ app: XCUIApplication, _ identifier: String, file: StaticString = #filePath, line: UInt = #line) {
         let button = app.buttons[identifier]
-        XCTAssertTrue(button.waitForExistence(timeout: 8), identifier, file: file, line: line)
+        reveal(app, button)
+        XCTAssertTrue(button.exists, identifier, file: file, line: line)
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: button)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 10), .completed, identifier, file: file, line: line)
-        if !button.isHittable {
-            for _ in 0..<5 where !button.isHittable { app.swipeUp() }
-        }
         XCTAssertTrue(button.isHittable, identifier, file: file, line: line)
         button.tap()
+    }
+
+    private func reveal(_ app: XCUIApplication, _ element: XCUIElement) {
+        // A saved sheet can still be animating away while the underlying view
+        // already exists. Let the transition finish before scrolling a form.
+        let visible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND hittable == true"), object: element)
+        if XCTWaiter.wait(for: [visible], timeout: 3) == .completed { return }
+        for _ in 0..<6 where !element.exists || !element.isHittable { scrollForm(app) }
+    }
+
+    private func scrollForm(_ app: XCUIApplication) {
+        // Scroll inside the form's viewport, which shrinks above the keyboard.
+        // A whole-screen swipe can otherwise begin on the software keyboard.
+        if app.collectionViews.firstMatch.exists { app.collectionViews.firstMatch.swipeUp() }
+        else if app.tables.firstMatch.exists { app.tables.firstMatch.swipeUp() }
+        else { app.swipeUp() }
     }
 
     private func replace(_ field: XCUIElement, with value: String) {
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap()
+        // Place the insertion caret after the existing text, including the
+        // right-aligned numeric fields, before deleting the complete value.
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
         let old = field.value as? String ?? ""
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count) + value)
     }
@@ -78,10 +97,11 @@ final class MapEditingUITests: XCTestCase {
     }
 
     func testLineCreateEditPropertiesCopyAndUndoWithTouchControls() {
-        let app = launch()
+        let app = launch(captureScreens: true)
         tap(app, "tool-line"); tap(app, "newLine")
         coordinate(app, "400", "300"); tap(app, "addPoint")
         coordinate(app, "420", "300"); tap(app, "addPoint")
+        screenshot(app, "手机线路草稿与准星")
         tap(app, "saveDraft")
         expectCounts(app, lines: 3, nodes: 6, crosses: 1)
         // First generated fixture code. Re-open the saved version before editing.
@@ -93,6 +113,7 @@ final class MapEditingUITests: XCTestCase {
         tap(app, "selectedMore"); tap(app, "lineProperties")
         replace(app.textFields["lineName"], with: "触摸测试")
         replace(app.textFields["lineSpeed"], with: "120")
+        reveal(app, app.switches["lineTwoWay"])
         app.switches["lineTwoWay"].tap()
         tap(app, "saveLineProperties")
         XCTAssertTrue(app.staticTexts["线路 · 触摸测试"].waitForExistence(timeout: 8))
@@ -171,6 +192,99 @@ final class MapEditingUITests: XCTestCase {
         coordinate(app, "400", "300")
         screenshot(app, "手机框选整组移动预览")
         tap(app, "cancelDraft")
+        expectCounts(app, lines: 2, nodes: 6, crosses: 1)
+        choose(app, tool: "node", object: "node-EEEEEEEEEE")
+        tap(app, "selectedDetails")
+        XCTAssertTrue(app.staticTexts["150.5, 110.5"].waitForExistence(timeout: 5))
+    }
+
+    func testLogicalNodeConnectionPreviewSaveAndUndo() {
+        let app = launch()
+        choose(app, tool: "node", object: "node-DDDDDDDDDD")
+        tap(app, "selectedMore"); tap(app, "连接另一个 LN")
+        tap(app, "从列表选择"); tap(app, "node-EEEEEEEEEE")
+        XCTAssertTrue(app.buttons["previewConnection"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["saveConnection"].isEnabled)
+        tap(app, "previewConnection")
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: app.buttons["saveConnection"])
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
+        screenshot(app, "手机LN连接预览")
+        tap(app, "saveConnection")
+        expectCounts(app, lines: 3, nodes: 6, crosses: 1)
+        tap(app, "undoMap"); tap(app, "确认撤销")
+        expectCounts(app, lines: 2, nodes: 6, crosses: 1)
+    }
+
+    func testLineSplitThenMergeUsesPreviewAndCanBeUndone() {
+        let app = launch()
+        tap(app, "tool-line"); tap(app, "newLine")
+        for (x, y) in [("400", "300"), ("420", "300"), ("420", "320"), ("440", "320")] {
+            coordinate(app, x, y); tap(app, "addPoint")
+        }
+        tap(app, "saveDraft")
+        expectCounts(app, lines: 3, nodes: 6, crosses: 1)
+        choose(app, tool: "line", object: "line-ZZZZZZZZAB")
+        tap(app, "selectedMore"); tap(app, "拆分线路")
+        XCTAssertTrue(app.buttons["saveSplit"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["saveSplit"].isEnabled)
+        tap(app, "节点 3 前 · (420, 320)")
+        screenshot(app, "手机线路拆分预览")
+        tap(app, "saveSplit")
+        expectCounts(app, lines: 4, nodes: 6, crosses: 1)
+        choose(app, tool: "line", object: "line-ZZZZZZZZAB")
+        tap(app, "selectedMore"); tap(app, "合并线路")
+        tap(app, "从列表选择"); tap(app, "line-ZZZZZZZZAC")
+        XCTAssertTrue(app.buttons["previewMerge"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["saveMerge"].isEnabled)
+        tap(app, "previewMerge")
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: app.buttons["saveMerge"])
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
+        screenshot(app, "手机线路合并预览")
+        tap(app, "saveMerge")
+        expectCounts(app, lines: 3, nodes: 6, crosses: 1)
+        tap(app, "undoMap"); tap(app, "确认撤销")
+        expectCounts(app, lines: 4, nodes: 6, crosses: 1)
+    }
+
+    func testFlowJSONRequiresPreviewBeforeImportAndCanBeUndone() {
+        let app = launch()
+        tap(app, "moreTools"); tap(app, "导入流程图")
+        let json = #"{"format":"argumentmap.flow/1","origin":"p","ln":[{"id":"p","at":[100.5,100.5],"size":6,"value":"Imported","logic":"UI_FLOW_PROP"}],"roads":[{"id":"r","points":[[90,100],[110,100]],"name":"Flow"}],"crosses":[]}"#
+        let editor = app.textViews["flowJSON"]
+        reveal(app, editor)
+        XCTAssertTrue(editor.exists)
+        editor.tap(); editor.typeText(json)
+        XCTAssertFalse(app.buttons["saveFlow"].isEnabled)
+        let x = app.textFields["flowOriginX"], y = app.textFields["flowOriginY"]
+        reveal(app, x); replace(x, with: "700.5")
+        reveal(app, y); replace(y, with: "500.5")
+        tap(app, "previewFlow")
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: app.buttons["saveFlow"])
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
+        scrollForm(app)
+        screenshot(app, "手机流程图导入预览")
+        tap(app, "saveFlow")
+        expectCounts(app, lines: 3, nodes: 7, crosses: 1)
+        tap(app, "undoMap"); tap(app, "确认撤销")
+        expectCounts(app, lines: 2, nodes: 6, crosses: 1)
+    }
+
+    func testAreaCopyPasteAndUndoPreservesTheOriginalGroup() {
+        let app = launch()
+        tap(app, "tool-area"); tap(app, "beginArea")
+        coordinate(app, "70", "80"); tap(app, "placementConfirm")
+        coordinate(app, "240", "140"); tap(app, "placementConfirm")
+        XCTAssertTrue(app.staticTexts["areaCounts"].waitForExistence(timeout: 8))
+        XCTAssertEqual(app.staticTexts["areaCounts"].label, "选中 1 条线路 · 5 个 LN · 0 个 Cross")
+        tap(app, "areaCopy")
+        // The native PasteButton reads the JSON copied by the app, exercising
+        // the same clipboard route used for WPF/iOS exchange.
+        tap(app, "moreTools"); tap(app, "pasteSystemClipboard")
+        coordinate(app, "400", "300")
+        screenshot(app, "手机整组复制落点预览")
+        tap(app, "placementConfirm")
+        expectCounts(app, lines: 3, nodes: 11, crosses: 1)
+        tap(app, "undoMap"); tap(app, "确认撤销")
         expectCounts(app, lines: 2, nodes: 6, crosses: 1)
         choose(app, tool: "node", object: "node-EEEEEEEEEE")
         tap(app, "selectedDetails")

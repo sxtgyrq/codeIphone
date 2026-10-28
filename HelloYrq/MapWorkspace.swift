@@ -1,11 +1,11 @@
 import SwiftUI
+import UIKit
 
 private enum MapPlacement {
     case none, newNode(Int), instance(MapLogicalNode), moveNode(MapLogicalNode), copyNode(MapLogicalNode)
     case pasteLine(MapLineCopyData), areaFirst, areaSecond(CGPoint), moveArea(MapAreaSelection), pasteArea(MapAreaSelection)
     var active: Bool { if case .none = self { return false }; return true }
 }
-private enum MapClipboard { case line(MapLineCopyData), node(MapLogicalNode), area(MapAreaSelection) }
 private enum WorkspaceSheet: Identifiable {
     case coordinates, sizes, points, objects, nodes, help, flow
     case node(MapLogicalNode), newNode(Int, CGPoint), cross(MapCross), properties(MapLine), details(MapSelection)
@@ -159,6 +159,9 @@ struct MapWorkspace: View {
                 Divider()
                 MapMenuButton("导入流程图", systemImage: "square.and.arrow.down") { sheet = .flow }.disabled(editing || !canWrite)
                 MapMenuButton("粘贴", systemImage: "doc.on.clipboard", action: beginPaste).disabled(clipboard == nil || editing || !canWrite)
+                PasteButton(payloadType: String.self) { values in pasteSystem(values.first) }
+                    .labelStyle(MapSystemPasteLabelStyle())
+                    .disabled(editing || !canWrite).accessibilityIdentifier("pasteSystemClipboard")
                 MapMenuButton("回到地图中心", systemImage: "location") { interaction.locate(CGPoint(x: 250_000, y: 250_000)) }
                 MapMenuButton("放大", systemImage: "plus.magnifyingglass") { interaction.zoomRequest = max(0, interaction.zoomRequest) + 1 }
                 MapMenuButton("缩小", systemImage: "minus.magnifyingglass") { interaction.zoomRequest = min(0, interaction.zoomRequest) - 1 }
@@ -267,7 +270,7 @@ struct MapWorkspace: View {
                     switch item {
                     case .line(let line):
                         Button("线路属性") { sheet = .properties(line) }.accessibilityIdentifier("lineProperties")
-                        Button("复制线路") { clipboard = .line(MapLineCopyData(line: line)); selection = nil; interaction.selectedID = nil }
+                        Button("复制线路") { _ = copyMap(.line(MapLineCopyData(line: line))) }
                         Button("反转方向") { run { _ = try await model.execute("已反转线路") { try await $0.reverseLine(lineCode: line.code, version: line.version, session: $1) } } }.disabled(!canEdit(line))
                         Button("拆分线路") { sheet = .split(line) }.disabled(!canEdit(line) || line.nodes.count < 4)
                         Button("合并线路") { mergeSource = line; selection = nil; interaction.tool = .line }.disabled(!canEdit(line))
@@ -275,7 +278,7 @@ struct MapWorkspace: View {
                         Button("删除线路", role: .destructive) { confirm("删除线路 \(line.code)？") { run { _ = try await model.execute("已删除线路") { try await $0.deleteLine(lineCode: line.code, version: line.version, session: $1) }; selection = nil } } }.disabled(!canEdit(line))
                     case .logicalNode(let node):
                         Button("移动节点") { setPlacement(.moveNode(node)) }.disabled(!canEdit(node))
-                        Button("复制节点") { clipboard = .node(node); selection = nil }.disabled(node.sideLength == 18)
+                        Button("复制节点") { _ = copyMap(.node(node)) }.disabled(node.sideLength == 18)
                         Button("连接另一个 LN") { beginConnection(node) }
                         if node.sideLength == 12 && MapNodeEditorRules.canInstantiate(node) {
                             Button("创建该类的实例") { setPlacement(.instance(node)) }
@@ -345,7 +348,9 @@ struct MapWorkspace: View {
                 HStack {
                     dockButton("移动", "arrow.up.and.down.and.arrow.left.and.right", id: "areaMove", disabled: !canWrite) { setPlacement(.moveArea(area)) }
                     Spacer()
-                    dockButton("复制", "doc.on.doc", id: "areaCopy") { clipboard = .area(area); self.area = nil; interaction.region = nil }
+                    dockButton("复制", "doc.on.doc", id: "areaCopy") {
+                        if copyMap(.area(area)) { self.area = nil; interaction.region = nil }
+                    }
                     Spacer()
                     Menu {
                         Button("删除整组", role: .destructive) { confirm("删除框选中的全部对象？") { run { _ = try await model.execute("已删除框选对象") { try await $0.deleteMapArea(selection: area, session: $1) }; clearOperation() } } }.disabled(!canWrite).accessibilityIdentifier("areaDelete")
@@ -408,7 +413,7 @@ struct MapWorkspace: View {
         }, onDelete: { selected in
             _ = try await model.execute("已删除 LN") { try await $0.deleteLogicalNode(node: selected, session: $1) }; selection = nil
         }, onMove: { setPlacement(.moveNode($0)) }, onLocate: { locate(.logicalNode($0)) },
-        onCopy: { clipboard = .node($0); selection = nil }, onConnect: beginConnection,
+        onCopy: { _ = copyMap(.node($0)) }, onConnect: beginConnection,
         onCreateInstance: { setPlacement(.instance($0)) })
     }
 
@@ -506,24 +511,36 @@ struct MapWorkspace: View {
     private func saveDraft() {
         guard let value = draft, value.validationMessage == nil else { return }
         run {
-            var saving = value
-            if saving.version < 0 {
-                let created = try await model.execute("已建立线路，正在保存草稿", refresh: false) { try await $0.createLine(session: $1) }
-                saving = MapLineDraft(line: created)
-                saving.points = value.points.enumerated().map { MapLinePoint(lineCode: created.code, order: $0.offset, x: $0.element.x, y: $0.element.y) }
-                draft = saving; history = []
-            }
+            let saving = try await persistedDraft(value)
             let result = try await model.execute("线路已保存。可继续计算交点。") {
                 try await $0.saveLine(lineCode: saving.lineCode, version: saving.version, nodes: saving.points, session: $1)
             }
             clearOperation(); selection = .line(result); interaction.selectedID = selection?.id
         }
     }
+    /// Server position search needs a real line identity. Retain that identity
+    /// even if a later query/save fails, including in local undo history.
+    private func persistedDraft(_ value: MapLineDraft) async throws -> MapLineDraft {
+        guard value.version < 0 else { return value }
+        let created = try await model.execute("已建立线路，正在校验草稿", refresh: false) { try await $0.createLine(session: $1) }
+        func rebound(_ source: MapLineDraft) -> MapLineDraft {
+            var copy = MapLineDraft(line: created)
+            copy.points = source.points.enumerated().map {
+                MapLinePoint(lineCode: created.code, order: $0.offset, x: $0.element.x, y: $0.element.y)
+            }
+            copy.addFromStart = source.addFromStart
+            return copy
+        }
+        let saving = rebound(value)
+        history = history.map(rebound)
+        draft = saving
+        return saving
+    }
     private func moveDraftPoint() {
         guard let value = draft, let index = interaction.selectedPoint, value.points.indices.contains(index) else { return }
         let point = interaction.cursor
-        if value.version < 0 { mutateDraft { try $0.movePoint(at: index, to: point) }; return }
         run {
+            let value = try await persistedDraft(value)
             let proposal = try await model.execute("已找到合法位置", mutation: false, refresh: false) {
                 try await $0.findNodePosition(lineCode: value.lineCode, version: value.version, nodes: value.points, nodeOrder: index,
                                              targetX: Double(point.x), targetY: Double(point.y), session: $1)
@@ -548,6 +565,20 @@ struct MapWorkspace: View {
         case .node(let source): setPlacement(.copyNode(source))
         case .area(let source): setPlacement(.pasteArea(source))
         }
+    }
+    @discardableResult private func copyMap(_ item: MapClipboard) -> Bool {
+        do {
+            let text = try MapClipboardCodec.encode(item)
+            UIPasteboard.general.string = text
+            clipboard = item; selection = nil; interaction.selectedID = nil
+            localNotice = "已复制，可从“更多”粘贴并选择新位置。"
+            return true
+        } catch { localError = error.localizedDescription; return false }
+    }
+    private func pasteSystem(_ text: String?) {
+        guard !editing, canWrite, let text else { return }
+        do { clipboard = try MapClipboardCodec.decode(text); beginPaste() }
+        catch { localError = error.localizedDescription }
     }
     private func setPlacement(_ value: MapPlacement) {
         placement = value; selection = nil; interaction.selectedID = nil; interaction.showCursor = value.active
@@ -586,8 +617,9 @@ struct MapWorkspace: View {
             guard bounds.isValid else { localError = "请选择不同的第二个角，让区域有宽度和高度。"; return }
             run { area = try await model.execute("已选中区域内的完整对象", mutation: false, refresh: false) { try await $0.selectMapArea(bounds: bounds, session: $1) }; placement = .none; interaction.showCursor = false; interaction.region = bounds }
         case .moveArea(let selected), .pasteArea(let selected):
-            let center = areaCenter(selected), dx = Int((cursor.x - center.x).rounded()), dy = Int((cursor.y - center.y).rounded())
             let pasting: Bool = { if case .pasteArea = placement { return true }; return false }()
+            let anchor = pasting ? areaPasteAnchor(selected) : areaCenter(selected)
+            let dx = Int((cursor.x - anchor.x).rounded()), dy = Int((cursor.y - anchor.y).rounded())
             run {
                 if pasting {
                     let result = try await model.execute("已粘贴框选对象") { try await $0.pasteMapArea(selection: selected, deltaX: dx, deltaY: dy, session: $1) }
@@ -618,8 +650,9 @@ struct MapWorkspace: View {
             }
         case .areaSecond(let start): interaction.region = areaBounds(start, interaction.cursor)
         case .moveArea(let selected), .pasteArea(let selected):
-            let center = areaCenter(selected)
-            let dx = Int((interaction.cursor.x - center.x).rounded()), dy = Int((interaction.cursor.y - center.y).rounded())
+            let pasting: Bool = { if case .pasteArea = placement { return true }; return false }()
+            let anchor = pasting ? areaPasteAnchor(selected) : areaCenter(selected)
+            let dx = Int((interaction.cursor.x - anchor.x).rounded()), dy = Int((interaction.cursor.y - anchor.y).rounded())
             interaction.preview = MapPreviewTransform.shifted(selected.snapshot, dx: dx, dy: dy)
             interaction.region = MapAreaBounds(left: selected.bounds.left + Double(dx), bottom: selected.bounds.bottom + Double(dy), right: selected.bounds.right + Double(dx), top: selected.bounds.top + Double(dy))
         default: break
@@ -674,6 +707,9 @@ struct MapWorkspace: View {
     private func areaCenter(_ selection: MapAreaSelection) -> CGPoint {
         CGPoint(x: (selection.bounds.left + selection.bounds.right) / 2, y: (selection.bounds.bottom + selection.bounds.top) / 2)
     }
+    private func areaPasteAnchor(_ selection: MapAreaSelection) -> CGPoint {
+        CGPoint(x: floor(selection.bounds.left), y: ceil(selection.bounds.top))
+    }
     private func areaBounds(_ a: CGPoint, _ b: CGPoint) -> MapAreaBounds {
         MapAreaBounds(left: Double(min(a.x, b.x).rounded()), bottom: Double(min(a.y, b.y).rounded()),
                       right: Double(max(a.x, b.x).rounded()), top: Double(max(a.y, b.y).rounded()))
@@ -708,7 +744,8 @@ struct MapWorkspace: View {
         switch placement {
         case .areaFirst: return "第 1 步：把准星移到区域的第一个角。"
         case .areaSecond: return "第 2 步：选择对角，预览框选范围。"
-        case .moveArea, .pasteArea: return "移动地图调整整组位置，预览后确认。"
+        case .moveArea: return "移动地图调整整组位置，预览后确认。"
+        case .pasteArea: return "准星对应复制区域左上角，调整位置后确认粘贴。"
         case .moveNode: return "移动地图调整 LN 位置，确认后保存。"
         case .pasteLine, .copyNode: return "选择粘贴位置，预览后确认。"
         default: return "选择 LN 落点，中心自动吸附整数＋0.5。"
@@ -716,5 +753,11 @@ struct MapWorkspace: View {
     }
     private var placementButton: String {
         switch placement { case .areaFirst: return "确定第一个角"; case .areaSecond: return "完成框选"; default: return "确认落点" }
+    }
+}
+
+private struct MapSystemPasteLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Label("从系统剪贴板粘贴", systemImage: "doc.on.clipboard")
     }
 }

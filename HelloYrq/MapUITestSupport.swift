@@ -378,9 +378,21 @@ private final class MapEditingFixture {
             guard source.code != target.code else { throw MapFixtureError("InvalidConnection", "请选择两个不同 LN") }
             let code = nextCode()
             let sx = Int(source.x), sy = Int(source.y), tx = Int(target.x), ty = Int(target.y)
-            var points = [MapLinePoint(lineCode: code, order: 0, x: sx, y: sy)]
-            if sx != tx && sy != ty { points.append(MapLinePoint(lineCode: code, order: points.count, x: tx, y: sy)) }
-            points.append(MapLinePoint(lineCode: code, order: points.count, x: tx, y: ty))
+            var points: [MapLinePoint]
+            if source.y == target.y {
+                // The aligned fixture nodes are crossed by an integer lane;
+                // the endpoints stay outside both LN squares, as in Server plans.
+                let forward = source.x < target.x
+                let firstX = forward ? Int(floor(source.x - Double(source.sideLength) / 2)) : Int(ceil(source.x + Double(source.sideLength) / 2))
+                let lastX = forward ? Int(ceil(target.x + Double(target.sideLength) / 2)) : Int(floor(target.x - Double(target.sideLength) / 2))
+                let lane = Int(ceil(source.y))
+                points = [MapLinePoint(lineCode: code, order: 0, x: firstX, y: lane),
+                          MapLinePoint(lineCode: code, order: 1, x: lastX, y: lane)]
+            } else {
+                points = [MapLinePoint(lineCode: code, order: 0, x: sx, y: sy)]
+                if sx != tx && sy != ty { points.append(MapLinePoint(lineCode: code, order: points.count, x: tx, y: sy)) }
+                points.append(MapLinePoint(lineCode: code, order: points.count, x: tx, y: ty))
+            }
             let result = MapLogicalNodeConnectionPlan(source: source, target: target, lineCode: code, nodes: points, kind: kind, join: nil, continuation: [])
             pendingConnection = result; return try json(result)
         case "SaveLogicalNodeConnection":
