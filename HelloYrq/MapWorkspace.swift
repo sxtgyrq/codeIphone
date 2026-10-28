@@ -370,7 +370,7 @@ struct MapWorkspace: View {
         }
         Section("粘贴与导入") {
             command("导入流程图", icon: "square.and.arrow.down", disabled: editing || !canWrite) { sheet = .flow }
-            command("粘贴", icon: "doc.on.clipboard", disabled: clipboard == nil || editing || !canWrite, action: beginPaste)
+            command("粘贴副本", icon: "doc.on.clipboard", id: "pasteLocalClipboard", disabled: clipboard == nil || editing || !canWrite, action: beginPaste)
         }
         Section("视图") {
             command("回到地图中心", icon: "location") { interaction.locate(CGPoint(x: 250_000, y: 250_000)) }
@@ -451,7 +451,7 @@ struct MapWorkspace: View {
         }
         Section("地图") {
             command("定位对象", icon: "location") { locate(item) }
-            command("粘贴", icon: "doc.on.clipboard", disabled: clipboard == nil, action: beginPaste)
+            command("粘贴副本", icon: "doc.on.clipboard", id: "pasteLocalClipboard", disabled: clipboard == nil, action: beginPaste)
             command("刷新", icon: "arrow.clockwise") { model.refresh() }
         }
     }
@@ -751,7 +751,7 @@ struct MapWorkspace: View {
             let text = try MapClipboardCodec.encode(item)
             UIPasteboard.general.string = text
             clipboard = item; selection = nil; interaction.selectedID = nil
-            localNotice = "已复制，可从“更多”粘贴并选择新位置。"
+            localNotice = "已复制，可从“更多 → 粘贴副本”选择新位置。"
             return true
         } catch { localError = error.localizedDescription; return false }
     }

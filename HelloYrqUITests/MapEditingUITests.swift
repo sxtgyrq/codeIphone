@@ -40,13 +40,17 @@ final class MapEditingUITests: XCTestCase {
         let button = app.buttons[identifier]
         reveal(app, button)
         XCTAssertTrue(button.exists, identifier, file: file, line: line)
-        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: button)
-        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 10), .completed, identifier, file: file, line: line)
+        if !button.isEnabled {
+            let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: button)
+            XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 10), .completed, identifier, file: file, line: line)
+        }
+        XCTAssertTrue(button.isEnabled, identifier, file: file, line: line)
         XCTAssertTrue(button.isHittable, identifier, file: file, line: line)
         button.tap()
     }
 
     private func reveal(_ app: XCUIApplication, _ element: XCUIElement) {
+        if element.exists && element.isHittable { return }
         // A saved sheet can still be animating away while the underlying view
         // already exists. Let the transition finish before scrolling a form.
         let visible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND hittable == true"), object: element)
@@ -57,9 +61,16 @@ final class MapEditingUITests: XCTestCase {
     private func scrollForm(_ app: XCUIApplication) {
         // Scroll inside the form's viewport, which shrinks above the keyboard.
         // A whole-screen swipe can otherwise begin on the software keyboard.
-        if app.collectionViews.firstMatch.exists { app.collectionViews.firstMatch.swipeUp() }
+        if app.collectionViews["flowImportForm"].exists { app.collectionViews["flowImportForm"].swipeUp() }
+        else if app.collectionViews.firstMatch.exists { app.collectionViews.firstMatch.swipeUp() }
         else if app.tables.firstMatch.exists { app.tables.firstMatch.swipeUp() }
         else { app.swipeUp() }
+    }
+
+    private func dismissFlowKeyboard(_ app: XCUIApplication) {
+        tap(app, "dismissFlowKeyboard")
+        let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.keyboards.firstMatch)
+        XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed, "The Flow keyboard must close before scrolling to another field")
     }
 
     private func replace(_ field: XCUIElement, with value: String) {
@@ -124,7 +135,7 @@ final class MapEditingUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["线路 · 触摸测试"].waitForExistence(timeout: 8))
         screenshot(app, "手机线路编辑与属性保存")
         tap(app, "selectedMore"); tap(app, "复制线路")
-        tap(app, "moreTools"); tap(app, "粘贴")
+        tap(app, "moreTools"); tap(app, "pasteLocalClipboard")
         coordinate(app, "500", "300")
         tap(app, "placementConfirm")
         expectCounts(app, lines: 4, nodes: 6, crosses: 1)
@@ -260,10 +271,13 @@ final class MapEditingUITests: XCTestCase {
         reveal(app, editor)
         XCTAssertTrue(editor.exists)
         replace(editor, with: json)
+        dismissFlowKeyboard(app)
         XCTAssertFalse(app.buttons["saveFlow"].isEnabled)
         let x = app.textFields["flowOriginX"], y = app.textFields["flowOriginY"]
         tap(app, "clear-flowOriginX"); replace(x, with: "700.5")
+        dismissFlowKeyboard(app)
         tap(app, "clear-flowOriginY"); replace(y, with: "500.5")
+        dismissFlowKeyboard(app)
         tap(app, "previewFlow")
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: app.buttons["saveFlow"])
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)

@@ -170,7 +170,7 @@ private final class MapUITestProtocol: URLProtocol {
     }
 }
 
-private struct MapFixtureError: Error {
+struct MapFixtureError: Error {
     let code: String
     let message: String
     init(_ code: String, _ message: String) { self.code = code; self.message = message }
@@ -179,7 +179,7 @@ private struct MapFixtureError: Error {
 /// An in-process server double for touch workflow tests only. It validates
 /// authentication, wire fields and versions and keeps atomic undo snapshots.
 /// It is not a replacement for the C# geometry/business-rule test suite.
-private final class MapEditingFixture {
+final class MapEditingFixture {
     private var snapshot: MapSnapshot
     private var serial = 0
     private var history: [(String, MapSnapshot)] = []
@@ -407,8 +407,11 @@ private final class MapEditingFixture {
             guard bounds.isValid else { throw MapFixtureError("InvalidBounds", "框选范围无效") }
             return try json(selection(bounds))
         case "MoveMapArea", "PasteMapArea", "DeleteMapArea":
-            let token: MapAreaSelection = try decode(body, "selection")
-            try validateSelection(token)
+            let expected: MapAreaSelection = try decode(body, "selection")
+            // Like MapAreaMoveService.ReadSelection, the request is a version
+            // token. Reload authoritative objects; clipboard display metadata
+            // (positions/canEdit) and posted properties are not source edits.
+            let token = try readSelection(expected, sourceObjectsOnly: path == "PasteMapArea")
             if path == "DeleteMapArea" {
                 remember("删除选区")
                 let roads = Set(token.lines.map(\.code)), nodes = Set(token.logicalNodes.map(\.code))
@@ -555,11 +558,38 @@ private final class MapEditingFixture {
         return MapAreaSelection(bounds: bounds, lines: lines, logicalNodes: nodes,
             crosses: snapshot.crosses.filter { codes.contains($0.key.roadCode1) && codes.contains($0.key.roadCode2) && inside($0.x, $0.y) })
     }
-    private func validateSelection(_ token: MapAreaSelection) throws {
-        guard token.bounds.isValid, token.lines.count + token.logicalNodes.count > 0 else { throw MapFixtureError("EmptySelection", "请选择完整的线路或 LN") }
-        for lineToken in token.lines { guard try line(code: lineToken.code) == lineToken else { throw MapFixtureError("VersionConflict", "选区线路已改变") } }
-        for nodeToken in token.logicalNodes { guard try node(code: nodeToken.code) == nodeToken else { throw MapFixtureError("VersionConflict", "选区 LN 已改变") } }
-        for cross in token.crosses { guard snapshot.crosses.contains(cross) else { throw MapFixtureError("VersionConflict", "选区 Cross 已改变") } }
+    private func readSelection(_ expected: MapAreaSelection, sourceObjectsOnly: Bool) throws -> MapAreaSelection {
+        guard expected.bounds.isValid else { throw MapFixtureError("InvalidBounds", "框选范围无效") }
+        let entire = selection(expected.bounds)
+        let requestedRoads = Set(expected.lines.map(\.code)), requestedNodes = Set(expected.logicalNodes.map(\.code))
+        let roads = sourceObjectsOnly ? entire.lines.filter { requestedRoads.contains($0.code) } : entire.lines
+        let nodes = sourceObjectsOnly ? entire.logicalNodes.filter { requestedNodes.contains($0.code) } : entire.logicalNodes
+        let selectedRoads = Set(roads.map(\.code))
+        let crosses = entire.crosses.filter { selectedRoads.contains($0.key.roadCode1) && selectedRoads.contains($0.key.roadCode2) }
+        guard !roads.isEmpty || !nodes.isEmpty else { throw MapFixtureError("EmptySelection", "请选择完整的线路或 LN") }
+        for road in roads {
+            guard road.owner == "demo" else { throw MapFixtureError("NotOwner", "当前用户不能修改这条线路") }
+            try editable(road)
+        }
+        for node in nodes {
+            guard node.canEdit ?? (node.owner == "demo") else { throw MapFixtureError("NotOwner", "没有操作 LN 的权限") }
+        }
+        guard sameVersions(expected.lines, roads, key: { $0.code }, version: { $0.version }),
+              sameVersions(expected.logicalNodes, nodes, key: { $0.code }, version: { $0.version }),
+              sameVersions(expected.crosses, crosses, key: { $0.key }, version: { $0.version }) else {
+            throw MapFixtureError("SelectionChanged", "框选对象、线路锁定或 Cross 设置已改变，请重新框选；未提交操作。")
+        }
+        return MapAreaSelection(bounds: expected.bounds, lines: roads, logicalNodes: nodes, crosses: crosses)
+    }
+
+    private func sameVersions<T, Key: Hashable>(_ expected: [T], _ current: [T],
+                                               key: (T) -> Key, version: (T) -> Int64) -> Bool {
+        guard expected.count == current.count else { return false }
+        var versions: [Key: Int64] = [:]
+        for item in expected {
+            guard versions.updateValue(version(item), forKey: key(item)) == nil else { return false }
+        }
+        return current.allSatisfy { versions[key($0)] == version($0) }
     }
     private func shiftedCross(_ old: MapCross, roads: [String: String], dx: Int, dy: Int) -> MapCross {
         let first = roads[old.key.roadCode1] ?? old.key.roadCode1, second = roads[old.key.roadCode2] ?? old.key.roadCode2

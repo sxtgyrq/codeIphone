@@ -292,6 +292,7 @@ struct MapFlowImportEditor: View {
     @ObservedObject var model: MapViewModel
     let onSaved: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var focusedInput: String?
     @State private var text = ""
     @State private var xText: String
     @State private var yText: String
@@ -337,6 +338,7 @@ struct MapFlowImportEditor: View {
                     }
                     TextEditor(text: $text).font(.system(.footnote, design: .monospaced))
                         .frame(minHeight: 170).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        .focused($focusedInput, equals: "flowJSON")
                         .accessibilityLabel("流程图 JSON").accessibilityIdentifier("flowJSON")
                     Text("使用 ArgumentMap Flow v1 JSON。先预览，确认布局后再导入。")
                         .font(.footnote).foregroundStyle(.secondary)
@@ -372,10 +374,19 @@ struct MapFlowImportEditor: View {
                 }
                 operationError(errorMessage, uncertain: uncertainResult)
             }
+            .scrollDismissesKeyboard(.interactively)
+            .accessibilityIdentifier("flowImportForm")
             .navigationTitle("导入流程图").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { work?.cancel(); dismiss() }.disabled(phase == .saving)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button { focusedInput = nil } label: {
+                        Image(systemName: "keyboard.chevron.compact.down").frame(width: 44, height: 44)
+                    }
+                    .disabled(focusedInput == nil)
+                    .accessibilityLabel("收起键盘").accessibilityIdentifier("dismissFlowKeyboard")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(phase == .saving ? "导入中…" : "确认导入", action: save)
@@ -399,6 +410,7 @@ struct MapFlowImportEditor: View {
             Text(title)
             Spacer()
             TextField("整数 + 0.5", text: value).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+                .focused($focusedInput, equals: id)
                 .frame(maxWidth: 160).accessibilityIdentifier(id)
             Button { value.wrappedValue = "" } label: {
                 Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary).frame(width: 44, height: 44)

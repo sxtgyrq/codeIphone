@@ -215,6 +215,16 @@
 			"isa" = "PBXBuildFile";
 			"fileRef" = "1EB3FD693F85514718303BCE";
 		};
+		"622195CAEEEE90E64093AE66" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "MapAreaFixtureTests.swift";
+			"sourceTree" = "<group>";
+		};
+		"6B83FE1E32F0819AE146D8E3" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "622195CAEEEE90E64093AE66";
+		};
 		"9B29ADA84C6A4917A61D80A3" = {
 			"isa" = "PBXFileReference";
 			"lastKnownFileType" = "sourcecode.swift";
@@ -412,6 +422,7 @@
 			"isa" = "PBXGroup";
 			"children" = (
 				"1EB3FD693F85514718303BCE",
+				"622195CAEEEE90E64093AE66",
 				"9B29ADA84C6A4917A61D80A3",
 				"00B682DB416899775B379B7C",
 				"61888AC1510E2DE57C1DFDD0",
@@ -679,6 +690,7 @@
 			"buildActionMask" = "2147483647";
 			"files" = (
 				"31B0CDE15CCEBC70E55832A3",
+				"6B83FE1E32F0819AE146D8E3",
 				"7159B115BC14CAD43FEDA832",
 				"B6BEAD8733B96A45BEE41AD3",
 				"59F46FABAAEBD7A723426F76",
