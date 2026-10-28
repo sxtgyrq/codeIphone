@@ -6,10 +6,28 @@ private enum MapPlacement {
     case pasteLine(MapLineCopyData), areaFirst, areaSecond(CGPoint), moveArea(MapAreaSelection), pasteArea(MapAreaSelection)
     var active: Bool { if case .none = self { return false }; return true }
 }
+private enum WorkspaceCommands {
+    case tools, selected(MapSelection), draft, display, area(MapAreaSelection)
+    var title: String {
+        switch self {
+        case .tools: return "地图工具"
+        case .selected(let item):
+            switch item {
+            case .line: return "线路操作"
+            case .logicalNode: return "LN 操作"
+            case .cross: return "Cross 操作"
+            }
+        case .draft: return "草稿操作"
+        case .display: return "显示与计算"
+        case .area: return "区域操作"
+        }
+    }
+}
 private enum WorkspaceSheet: Identifiable {
     case coordinates, sizes, points, objects, nodes, help, flow
     case node(MapLogicalNode), newNode(Int, CGPoint), cross(MapCross), properties(MapLine), details(MapSelection)
     case merge(MapLine, MapLine?), connection(MapLogicalNode?, MapLogicalNode?), split(MapLine)
+    case commands(WorkspaceCommands)
     var id: String { String(describing: self) }
 }
 
@@ -41,9 +59,10 @@ struct MapWorkspace: View {
     @State private var showingConfirmation = false
     @State private var confirmationTitle = ""
     @State private var confirmationAction: (() -> Void)?
+    @State private var commandAfterDismiss: (() -> Void)?
 
     private var map: MapSnapshot { model.snapshot ?? .empty }
-    private var busy: Bool { model.isWorking || running }
+    private var busy: Bool { model.isWorking || running || commandAfterDismiss != nil }
     private var editing: Bool { draft != nil || placement.active || connectionSource != nil || mergeSource != nil }
     private var canWrite: Bool { !busy && !model.requiresRefreshBeforeWrite && !model.hasPendingUndo }
 
@@ -76,7 +95,7 @@ struct MapWorkspace: View {
             }
             .navigationTitle("逻辑地图").navigationBarTitleDisplayMode(.inline)
             .toolbar { navigationTools }
-            .sheet(item: $sheet, content: sheetContent)
+            .sheet(item: $sheet, onDismiss: didDismissSheet, content: sheetContent)
             .alert("未完成操作", isPresented: Binding(get: { localError != nil }, set: { if !$0 { localError = nil } })) {
                 Button("知道了", role: .cancel) { localError = nil }
             } message: { Text(localError ?? "") }
@@ -88,6 +107,7 @@ struct MapWorkspace: View {
             .onChange(of: interaction.cursor) { _ in synchronizePreview() }
             .onChange(of: model.snapshot) { _ in refreshSelection() }
         }
+        .disabled(commandAfterDismiss != nil)
     }
 
     private var statusBar: some View {
@@ -148,29 +168,10 @@ struct MapWorkspace: View {
             .accessibilityIdentifier("undoMap")
         }
         ToolbarItem(placement: .navigationBarTrailing) {
-            Menu {
-                MapMenuButton("刷新地图（保留草稿）", systemImage: "arrow.clockwise") { model.refresh() }.disabled(busy)
-                if let draft, draft.version >= 0 {
-                    Button("重新加载当前线路") {
-                        confirm("放弃本地修改，重新加载当前线路？", action: reloadDraft)
-                    }.disabled(busy)
-                }
-                MapMenuButton("节点列表", systemImage: "list.bullet") { sheet = .nodes }.accessibilityIdentifier("nodesButton")
-                MapMenuButton("地图对象列表", systemImage: "square.grid.2x2") { sheet = .objects }
-                MapMenuButton("精确定位", systemImage: "scope") { sheet = .coordinates }
-                Divider()
-                MapMenuButton("导入流程图", systemImage: "square.and.arrow.down") { sheet = .flow }.disabled(editing || !canWrite)
-                MapMenuButton("粘贴", systemImage: "doc.on.clipboard", action: beginPaste).disabled(clipboard == nil || editing || !canWrite)
-                PasteButton(payloadType: String.self) { values in pasteSystem(values.first) }
-                    .labelStyle(MapSystemPasteLabelStyle())
-                    .disabled(editing || !canWrite).accessibilityIdentifier("pasteSystemClipboard")
-                MapMenuButton("回到地图中心", systemImage: "location") { interaction.locate(CGPoint(x: 250_000, y: 250_000)) }
-                MapMenuButton("放大", systemImage: "plus.magnifyingglass") { interaction.zoomRequest = max(0, interaction.zoomRequest) + 1 }
-                MapMenuButton("缩小", systemImage: "minus.magnifyingglass") { interaction.zoomRequest = min(0, interaction.zoomRequest) - 1 }
-                MapMenuButton(toolsVisible ? "收起工具栏" : "展开工具栏", systemImage: "rectangle.bottomthird.inset.filled") { toolsVisible.toggle() }
-                Divider()
-                MapMenuButton("触摸操作指南", systemImage: "questionmark.circle") { sheet = .help }
+            Button {
+                sheet = .commands(.tools)
             } label: { Image(systemName: "ellipsis.circle").frame(width: 44, height: 44) }.accessibilityLabel("更多").accessibilityIdentifier("moreTools")
+                .disabled(commandAfterDismiss != nil)
         }
     }
 
@@ -236,23 +237,11 @@ struct MapWorkspace: View {
     }
 
     private var displayMenu: some View {
-        Menu {
-            Toggle("线路箭头", isOn: $showArrows).onChange(of: showArrows) { if !$0 { interaction.showSpeeds = false } }
-            Toggle("线路速度", isOn: $interaction.showSpeeds).onChange(of: interaction.showSpeeds) { if $0 { showArrows = true } }
-            Toggle("LN 标签", isOn: $showLabels)
-            Toggle("LN 保护区域", isOn: $interaction.showProtection)
-            Toggle("Cross 交点", isOn: $showCrosses)
-            Toggle("连通（含单向）", isOn: $interaction.connected)
-            Toggle("不连通", isOn: $interaction.disconnected)
-            Toggle("未设置", isOn: $interaction.unset)
-            Divider()
-            MapMenuButton("刷新全部", systemImage: "arrow.clockwise") { model.refresh() }.disabled(busy)
-            MapMenuButton("查看全部", systemImage: "arrow.up.left.and.arrow.down.right") { fitRequest += 1 }
-            Button("计算交点") { model.startCalculation(.cross) }.disabled(model.isCalculating || !canWrite)
-            Button("重算 LN 关联") { model.startCalculation(.logicalNodes) }.disabled(model.isCalculating || !canWrite)
-            Toggle("连续放置 LN", isOn: $continuousNodes)
+        Button {
+            sheet = .commands(.display)
         } label: { Label("显示", systemImage: "slider.horizontal.3").font(.subheadline).frame(minHeight: 44) }
         .accessibilityIdentifier("displayMenu")
+        .disabled(commandAfterDismiss != nil)
     }
 
     private func selectionDock(_ item: MapSelection) -> some View {
@@ -268,32 +257,8 @@ struct MapWorkspace: View {
                 Spacer()
                 dockButton("资料", "info.circle", id: "selectedDetails") { sheet = .details(item) }
                 Spacer()
-                Menu {
-                    switch item {
-                    case .line(let line):
-                        Button("线路属性") { sheet = .properties(line) }.accessibilityIdentifier("lineProperties")
-                        Button("复制线路") { _ = copyMap(.line(MapLineCopyData(line: line))) }
-                        Button("反转方向") { run { _ = try await model.execute("已反转线路") { try await $0.reverseLine(lineCode: line.code, version: line.version, session: $1) } } }.disabled(!canEdit(line))
-                        Button("拆分线路") { sheet = .split(line) }.disabled(!canEdit(line) || line.nodes.count < 4)
-                        Button("合并线路") { mergeSource = line; selection = nil; interaction.tool = .line }.disabled(!canEdit(line))
-                        Button(line.isLocked ? "解锁线路" : "锁定线路") { run { _ = try await model.execute("已更新锁定状态") { try await $0.toggleLineLock(lineCode: line.code, version: line.version, session: $1) } } }
-                        Button("删除线路", role: .destructive) { confirm("删除线路 \(line.code)？") { run { _ = try await model.execute("已删除线路") { try await $0.deleteLine(lineCode: line.code, version: line.version, session: $1) }; selection = nil } } }.disabled(!canEdit(line))
-                    case .logicalNode(let node):
-                        Button("移动节点") { setPlacement(.moveNode(node)) }.disabled(!canEdit(node))
-                        Button("复制节点") { _ = copyMap(.node(node)) }.disabled(node.sideLength == 18)
-                        Button("连接另一个 LN") { beginConnection(node) }
-                        if node.sideLength == 12 && MapNodeEditorRules.canInstantiate(node) {
-                            Button("创建该类的实例") { setPlacement(.instance(node)) }
-                        }
-                        Button("删除节点", role: .destructive) { confirm("删除 LN \(node.code)？") { run { _ = try await model.execute("已删除节点") { try await $0.deleteLogicalNode(node: node, session: $1) }; selection = nil } } }.disabled(!canEdit(node))
-                    case .cross(let cross):
-                        Button("设置通行 / 选择同位置关系") { sheet = .cross(cross) }
-                        Button("计算交点") { model.startCalculation(.cross) }.disabled(model.isCalculating)
-                    }
-                    Divider()
-                    Button("定位对象") { locate(item) }
-                    Button("粘贴") { beginPaste() }.disabled(clipboard == nil)
-                    Button("刷新") { model.refresh() }
+                Button {
+                    sheet = .commands(.selected(item))
                 } label: { Label("更多", systemImage: "ellipsis").font(.subheadline).frame(minHeight: 44) }
                 .disabled(busy).accessibilityIdentifier("selectedMore")
             }
@@ -316,13 +281,8 @@ struct MapWorkspace: View {
                     Spacer()
                     dockButton("节点", "list.number", id: "draftPoints", disabled: busy) { sheet = .points }
                     Spacer()
-                    Menu {
-                        Button(draft?.addFromStart == true ? "切换到末端加点" : "切换到前端加点") { mutateDraft { $0.addFromStart.toggle() } }
-                        Button("移动选中节点到准星", action: moveDraftPoint).disabled(interaction.selectedPoint == nil)
-                        Button("在选中节点后插点") { if let index = interaction.selectedPoint { mutateDraft { try $0.insertPoint(interaction.cursor, after: index) } } }.disabled(interaction.selectedPoint == nil)
-                        Button("删除选中节点", role: .destructive) { if let index = interaction.selectedPoint { mutateDraft { try $0.removePoint(at: index) }; interaction.selectedPoint = nil } }.disabled(interaction.selectedPoint == nil)
-                        Button("反转草稿方向") { mutateDraft { $0.reverse() } }
-                        Button("撤回草稿一步", action: undoDraft).disabled(history.isEmpty)
+                    Button {
+                        sheet = .commands(.draft)
                     } label: { Label("更多", systemImage: "ellipsis").frame(minHeight: 44) }.disabled(busy).accessibilityIdentifier("draftMore")
                 }
             }
@@ -354,11 +314,10 @@ struct MapWorkspace: View {
                         if copyMap(.area(area)) { self.area = nil; interaction.region = nil }
                     }
                     Spacer()
-                    Menu {
-                        Button("删除整组", role: .destructive) { confirm("删除框选中的全部对象？") { run { _ = try await model.execute("已删除框选对象") { try await $0.deleteMapArea(selection: area, session: $1) }; clearOperation() } } }.disabled(!canWrite).accessibilityIdentifier("areaDelete")
-                        Button("重新框选") { self.area = nil; setPlacement(.areaFirst) }
-                        Button("取消选择") { self.area = nil; interaction.region = nil }
+                    Button {
+                        sheet = .commands(.area(area))
                     } label: { Label("更多", systemImage: "ellipsis").frame(minHeight: 44) }
+                    .accessibilityIdentifier("areaMore")
                 }
             }
         }
@@ -369,8 +328,193 @@ struct MapWorkspace: View {
             .disabled(disabled).accessibilityIdentifier(id)
     }
 
+    private func commandPanel(_ commands: WorkspaceCommands) -> some View {
+        NavigationStack {
+            List {
+                switch commands {
+                case .tools: toolCommands
+                case .selected(let item): selectedCommands(item).disabled(busy)
+                case .draft: draftCommands.disabled(busy)
+                case .display: displayCommands
+                case .area(let selected): areaCommands(selected)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle(commands.title).navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { sheet = nil }.frame(minHeight: 44).accessibilityIdentifier("closeCommands")
+                        .disabled(commandAfterDismiss != nil)
+                }
+            }
+        }
+        .presentationDragIndicator(.visible)
+        .accessibilityIdentifier("commandPanel")
+    }
+
+    @ViewBuilder private var toolCommands: some View {
+        Section("地图与定位") {
+            command("刷新地图（保留草稿）", icon: "arrow.clockwise", disabled: busy) { model.refresh() }
+            if let draft, draft.version >= 0 {
+                command("重新加载当前线路", icon: "arrow.counterclockwise", disabled: busy) {
+                    confirm("放弃本地修改，重新加载当前线路？", action: reloadDraft)
+                }
+            }
+            command("节点列表", icon: "list.bullet", id: "nodesButton") { sheet = .nodes }
+            command("地图对象列表", icon: "square.grid.2x2") { sheet = .objects }
+            command("精确定位", icon: "scope") { sheet = .coordinates }
+        }
+        Section("粘贴与导入") {
+            command("导入流程图", icon: "square.and.arrow.down", disabled: editing || !canWrite) { sheet = .flow }
+            command("粘贴", icon: "doc.on.clipboard", disabled: clipboard == nil || editing || !canWrite, action: beginPaste)
+            PasteButton(payloadType: String.self) { values in
+                performCommand { pasteSystem(values.first) }
+            }
+            .labelStyle(MapSystemPasteLabelStyle())
+            .frame(minHeight: 44)
+            .disabled(editing || !canWrite).accessibilityIdentifier("pasteSystemClipboard")
+        }
+        Section("视图") {
+            command("回到地图中心", icon: "location") { interaction.locate(CGPoint(x: 250_000, y: 250_000)) }
+            command("放大", icon: "plus.magnifyingglass") { interaction.zoomRequest = max(0, interaction.zoomRequest) + 1 }
+            command("缩小", icon: "minus.magnifyingglass") { interaction.zoomRequest = min(0, interaction.zoomRequest) - 1 }
+            command(toolsVisible ? "收起工具栏" : "展开工具栏", icon: "rectangle.bottomthird.inset.filled") { toolsVisible.toggle() }
+        }
+        Section {
+            command("触摸操作指南", icon: "questionmark.circle") { sheet = .help }
+        }
+    }
+
+    @ViewBuilder private func selectedCommands(_ item: MapSelection) -> some View {
+        Section(selectionTitle(item)) {
+            switch item {
+            case .line(let line):
+                command("线路属性", icon: "slider.horizontal.3", id: "lineProperties") { sheet = .properties(line) }
+                command("复制线路", icon: "doc.on.doc") { _ = copyMap(.line(MapLineCopyData(line: line))) }
+                command("反转方向", icon: "arrow.left.arrow.right", disabled: !canEdit(line)) {
+                    run { _ = try await model.execute("已反转线路") { try await $0.reverseLine(lineCode: line.code, version: line.version, session: $1) } }
+                }
+                command("拆分线路", icon: "scissors", disabled: !canEdit(line) || line.nodes.count < 4) { sheet = .split(line) }
+                command("合并线路", icon: "arrow.triangle.merge", disabled: !canEdit(line)) {
+                    mergeSource = line; selection = nil; interaction.tool = .line
+                }
+                command(line.isLocked ? "解锁线路" : "锁定线路", icon: line.isLocked ? "lock.open" : "lock") {
+                    run { _ = try await model.execute("已更新锁定状态") { try await $0.toggleLineLock(lineCode: line.code, version: line.version, session: $1) } }
+                }
+                command("删除线路", icon: "trash", role: .destructive, disabled: !canEdit(line)) {
+                    confirm("删除线路 \(line.code)？") {
+                        run { _ = try await model.execute("已删除线路") { try await $0.deleteLine(lineCode: line.code, version: line.version, session: $1) }; selection = nil }
+                    }
+                }
+            case .logicalNode(let node):
+                command("移动节点", icon: "arrow.up.and.down.and.arrow.left.and.right", disabled: !canEdit(node)) { setPlacement(.moveNode(node)) }
+                command("复制节点", icon: "doc.on.doc", disabled: node.sideLength == 18) { _ = copyMap(.node(node)) }
+                command("连接另一个 LN", icon: "point.topleft.down.to.point.bottomright.curvepath") { beginConnection(node) }
+                if node.sideLength == 12 && MapNodeEditorRules.canInstantiate(node) {
+                    command("创建该类的实例", icon: "plus.square.on.square") { setPlacement(.instance(node)) }
+                }
+                command("删除节点", icon: "trash", role: .destructive, disabled: !canEdit(node)) {
+                    confirm("删除 LN \(node.code)？") {
+                        run { _ = try await model.execute("已删除节点") { try await $0.deleteLogicalNode(node: node, session: $1) }; selection = nil }
+                    }
+                }
+            case .cross(let cross):
+                command("设置通行 / 选择同位置关系", icon: "arrow.left.arrow.right") { sheet = .cross(cross) }
+                command("计算交点", icon: "arrow.triangle.branch", disabled: model.isCalculating) { model.startCalculation(.cross) }
+            }
+        }
+        Section("地图") {
+            command("定位对象", icon: "location") { locate(item) }
+            command("粘贴", icon: "doc.on.clipboard", disabled: clipboard == nil, action: beginPaste)
+            command("刷新", icon: "arrow.clockwise") { model.refresh() }
+        }
+    }
+
+    @ViewBuilder private var draftCommands: some View {
+        Section("加点方向") {
+            command(draft?.addFromStart == true ? "切换到末端加点" : "切换到前端加点", icon: "arrow.left.arrow.right") {
+                mutateDraft { $0.addFromStart.toggle() }
+            }
+        }
+        Section("选中节点") {
+            command("移动选中节点到准星", icon: "scope", disabled: interaction.selectedPoint == nil, action: moveDraftPoint)
+            command("在选中节点后插点", icon: "plus.circle", disabled: interaction.selectedPoint == nil) {
+                if let index = interaction.selectedPoint { mutateDraft { try $0.insertPoint(interaction.cursor, after: index) } }
+            }
+            command("删除选中节点", icon: "trash", role: .destructive, disabled: interaction.selectedPoint == nil) {
+                if let index = interaction.selectedPoint { mutateDraft { try $0.removePoint(at: index) }; interaction.selectedPoint = nil }
+            }
+        }
+        Section("整条草稿") {
+            command("反转草稿方向", icon: "arrow.left.arrow.right") { mutateDraft { $0.reverse() } }
+            command("撤回草稿一步", icon: "arrow.uturn.backward", disabled: history.isEmpty, action: undoDraft)
+        }
+    }
+
+    @ViewBuilder private var displayCommands: some View {
+        Section("线路与 LN") {
+            Toggle("线路箭头", isOn: $showArrows).onChange(of: showArrows) { if !$0 { interaction.showSpeeds = false } }
+            Toggle("线路速度", isOn: $interaction.showSpeeds).onChange(of: interaction.showSpeeds) { if $0 { showArrows = true } }
+            Toggle("LN 标签", isOn: $showLabels)
+            Toggle("LN 保护区域", isOn: $interaction.showProtection)
+        }
+        Section("Cross 交点") {
+            Toggle("Cross 交点", isOn: $showCrosses)
+            Toggle("连通（含单向）", isOn: $interaction.connected)
+            Toggle("不连通", isOn: $interaction.disconnected)
+            Toggle("未设置", isOn: $interaction.unset)
+        }
+        Section("刷新与计算") {
+            command("刷新全部", icon: "arrow.clockwise", disabled: busy) { model.refresh() }
+            command("查看全部", icon: "arrow.up.left.and.arrow.down.right") { fitRequest += 1 }
+            command("计算交点", icon: "arrow.triangle.branch", disabled: model.isCalculating || !canWrite) { model.startCalculation(.cross) }
+            command("重算 LN 关联", icon: "arrow.triangle.2.circlepath", disabled: model.isCalculating || !canWrite) { model.startCalculation(.logicalNodes) }
+        }
+        Section("放置") { Toggle("连续放置 LN", isOn: $continuousNodes) }
+    }
+
+    @ViewBuilder private func areaCommands(_ selected: MapAreaSelection) -> some View {
+        Section("框选对象") {
+            command("删除整组", icon: "trash", id: "areaDelete", role: .destructive, disabled: !canWrite) {
+                confirm("删除框选中的全部对象？") {
+                    run { _ = try await model.execute("已删除框选对象") { try await $0.deleteMapArea(selection: selected, session: $1) }; clearOperation() }
+                }
+            }
+            command("重新框选", icon: "rectangle.dashed") { area = nil; setPlacement(.areaFirst) }
+            command("取消选择", icon: "xmark") { area = nil; interaction.region = nil }
+        }
+    }
+
+    private func command(_ title: String, icon: String, id: String? = nil, role: ButtonRole? = nil,
+                         disabled: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(role: role) { performCommand(action) } label: {
+            Label(title, systemImage: icon).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .disabled(disabled)
+        .accessibilityIdentifier(id ?? title)
+    }
+
+    /// Present the next editor or confirmation only after UIKit finishes closing
+    /// this panel. Merely closing it never cancels selection or an editing draft.
+    private func performCommand(_ action: @escaping () -> Void) {
+        guard commandAfterDismiss == nil else { return }
+        commandAfterDismiss = action
+        sheet = nil
+    }
+    private func didDismissSheet() {
+        guard let action = commandAfterDismiss else { return }
+        Task { @MainActor in
+            await Task.yield()
+            guard commandAfterDismiss != nil else { return }
+            commandAfterDismiss = nil
+            action()
+        }
+    }
+
     @ViewBuilder private func sheetContent(_ item: WorkspaceSheet) -> some View {
         switch item {
+        case .commands(let commands): commandPanel(commands).presentationDetents([.large])
         case .coordinates:
             MapCoordinateEditor(point: interaction.cursor) { interaction.locate($0) }.presentationDetents([.medium, .large])
         case .help: MapTouchGuide()

@@ -38,21 +38,19 @@ struct MapCanvasView: View {
         get { interaction.currentScale }
         nonmutating set { interaction.currentScale = newValue }
     }
-    private var hasFitted: Bool {
-        get { interaction.hasFittedViewport }
-        nonmutating set { interaction.hasFittedViewport = newValue }
-    }
     @State private var dragOrigin: CGPoint?
     @State private var pinchScale: CGFloat?
     private var selectedID: String? { interaction.selectedID }
 
-    private var hasRenderableContent: Bool {
-        snapshot.lines.contains { !$0.nodes.isEmpty } || !snapshot.logicalNodes.isEmpty || snapshot.crosses.contains(where: valid)
-    }
-
     var body: some View {
         GeometryReader { geometry in
-            let transform = MapTransform(center: center, scale: scale, size: geometry.size)
+            // Login can mount an empty canvas before the first snapshot arrives.
+            // Derive the first frame from the current snapshot/layout, rather
+            // than depending on an appearance callback that captured empty data.
+            let initialViewport = interaction.hasFittedViewport ? nil :
+                MapViewport.fitted(snapshot: snapshot, size: geometry.size, continuation: interaction.continuation)
+            let viewport = initialViewport ?? MapViewport(center: center, scale: scale)
+            let transform = MapTransform(center: viewport.center, scale: viewport.scale, size: geometry.size)
             ZStack(alignment: .bottom) {
                 Canvas(opaque: true, rendersAsynchronously: true) { context, size in
                     var drawingContext = context
@@ -83,22 +81,24 @@ struct MapCanvasView: View {
                     .allowsHitTesting(false)
             }
             .clipped()
-            .onAppear { if !hasFitted { fit(in: geometry.size) } }
-            .onChange(of: hasRenderableContent) { hasContent in
-                if hasContent && !hasFitted { fit(in: geometry.size) }
-            }
-            .onChange(of: geometry.size) { size in
-                if !hasFitted { fit(in: size) }
+            .task(id: initialViewport) { @MainActor in
+                // Let layout finish before publishing document state. A newer
+                // snapshot/size cancels this task and supplies its own fit.
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                interaction.initializeViewport(initialViewport)
             }
             .onChange(of: fitRequest) { _ in fit(in: geometry.size) }
             .onChange(of: interaction.focus?.id) { _ in
                 guard let request = interaction.focus else { return }
                 center = bounded(request.point)
                 if let requestedScale = request.scale { scale = min(MapTransform.maximumScale, max(0.0001, requestedScale)) }
+                interaction.hasFittedViewport = true
             }
             .onChange(of: interaction.zoomRequest) { value in
                 guard value != 0 else { return }
                 scale = min(MapTransform.maximumScale, max(0.0001, scale * (value > 0 ? 1.6 : 0.625)))
+                interaction.hasFittedViewport = true
             }
         }
     }
@@ -111,6 +111,7 @@ struct MapCanvasView: View {
                 guard let start = dragOrigin else { return }
                 center = bounded(CGPoint(x: start.x - value.translation.width / scale,
                                          y: start.y + value.translation.height / scale))
+                interaction.hasFittedViewport = true
             }
             .onEnded { _ in dragOrigin = nil }
     }
@@ -121,6 +122,7 @@ struct MapCanvasView: View {
                 if pinchScale == nil { pinchScale = scale; dragOrigin = nil }
                 guard let initial = pinchScale, value.isFinite, value > 0 else { return }
                 scale = min(MapTransform.maximumScale, max(0.0001, initial * value))
+                interaction.hasFittedViewport = true
             }
             .onEnded { _ in pinchScale = nil }
     }
@@ -130,34 +132,9 @@ struct MapCanvasView: View {
     }
 
     private func fit(in size: CGSize) {
-        guard size.width > 0, size.height > 0 else { return }
-        var minX = CGFloat.infinity, minY = CGFloat.infinity
-        var maxX = -CGFloat.infinity, maxY = -CGFloat.infinity
-        func include(_ point: CGPoint) {
-            guard point.x.isFinite, point.y.isFinite else { return }
-            minX = min(minX, point.x); maxX = max(maxX, point.x)
-            minY = min(minY, point.y); maxY = max(maxY, point.y)
-        }
-        for line in snapshot.lines {
-            for point in line.nodes { include(CGPoint(x: CGFloat(point.x), y: CGFloat(point.y))) }
-        }
-        for node in snapshot.logicalNodes where node.x.isFinite && node.y.isFinite {
-            let half = CGFloat(node.sideLength) / 2
-            include(CGPoint(x: CGFloat(node.x) - half, y: CGFloat(node.y) - half))
-            include(CGPoint(x: CGFloat(node.x) + half, y: CGFloat(node.y) + half))
-        }
-        for cross in snapshot.crosses where valid(cross) {
-            include(CGPoint(x: CGFloat(cross.x), y: CGFloat(cross.y)))
-        }
-        for point in interaction.continuation { include(CGPoint(x: point.x, y: point.y)) }
-        guard minX.isFinite, minY.isFinite else { return }
-        let bounds = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
-        center = bounded(CGPoint(x: bounds.midX, y: bounds.midY))
-        let availableWidth = max(1, size.width - 96)
-        let availableHeight = max(1, size.height - 120)
-        scale = min(32, max(0.0001, min(availableWidth / max(20, bounds.width),
-                                      availableHeight / max(20, bounds.height))))
-        hasFitted = true
+        guard let viewport = MapViewport.fitted(snapshot: snapshot, size: size,
+                                                continuation: interaction.continuation) else { return }
+        interaction.setViewport(viewport)
         dragOrigin = nil
         pinchScale = nil
     }
@@ -379,7 +356,7 @@ struct MapCanvasView: View {
 
     private func scaleOverlay(transform: MapTransform) -> some View {
         HStack(alignment: .bottom) {
-            Text("X \(coordinate(center.x))  Y \(coordinate(center.y))")
+            Text("X \(coordinate(transform.center.x))  Y \(coordinate(transform.center.y))")
                 .font(.system(size: 9, design: .monospaced))
                 .accessibilityIdentifier("mapCoordinates")
                 .padding(5)

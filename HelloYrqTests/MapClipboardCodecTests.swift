@@ -54,7 +54,8 @@ final class MapClipboardCodecTests: XCTestCase {
         XCTAssertNil(selected.logicalNodes[0].canEdit)
         XCTAssertTrue(selected.logicalNodes[0].positions.isEmpty)
         let encoded = try MapClipboardCodec.encode(.area(selected))
-        XCTAssertTrue(encoded.contains("argumentmap.area/1"))
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(encoded.utf8)) as? [String: Any])
+        XCTAssertEqual(root["format"] as? String, "argumentmap.area/1")
         guard case .area(let restored) = try MapClipboardCodec.decode(encoded) else { return XCTFail("Expected area") }
         XCTAssertEqual(restored, selected)
     }
