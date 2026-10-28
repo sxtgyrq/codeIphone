@@ -60,6 +60,7 @@ struct MapWorkspace: View {
     @State private var confirmationTitle = ""
     @State private var confirmationAction: (() -> Void)?
     @State private var commandAfterDismiss: (() -> Void)?
+    @State private var commandPresentationID = UUID()
 
     private var map: MapSnapshot { model.snapshot ?? .empty }
     private var busy: Bool { model.isWorking || running || commandAfterDismiss != nil }
@@ -169,7 +170,7 @@ struct MapWorkspace: View {
         }
         ToolbarItem(placement: .navigationBarTrailing) {
             Button {
-                sheet = .commands(.tools)
+                showCommands(.tools)
             } label: { Image(systemName: "ellipsis.circle").frame(width: 44, height: 44) }.accessibilityLabel("更多").accessibilityIdentifier("moreTools")
                 .disabled(commandAfterDismiss != nil)
         }
@@ -238,7 +239,7 @@ struct MapWorkspace: View {
 
     private var displayMenu: some View {
         Button {
-            sheet = .commands(.display)
+            showCommands(.display)
         } label: { Label("显示", systemImage: "slider.horizontal.3").font(.subheadline).frame(minHeight: 44) }
         .accessibilityIdentifier("displayMenu")
         .disabled(commandAfterDismiss != nil)
@@ -258,7 +259,7 @@ struct MapWorkspace: View {
                 dockButton("资料", "info.circle", id: "selectedDetails") { sheet = .details(item) }
                 Spacer()
                 Button {
-                    sheet = .commands(.selected(item))
+                    showCommands(.selected(item))
                 } label: { Label("更多", systemImage: "ellipsis").font(.subheadline).frame(minHeight: 44) }
                 .disabled(busy).accessibilityIdentifier("selectedMore")
             }
@@ -282,7 +283,7 @@ struct MapWorkspace: View {
                     dockButton("节点", "list.number", id: "draftPoints", disabled: busy) { sheet = .points }
                     Spacer()
                     Button {
-                        sheet = .commands(.draft)
+                        showCommands(.draft)
                     } label: { Label("更多", systemImage: "ellipsis").frame(minHeight: 44) }.disabled(busy).accessibilityIdentifier("draftMore")
                 }
             }
@@ -315,7 +316,7 @@ struct MapWorkspace: View {
                     }
                     Spacer()
                     Button {
-                        sheet = .commands(.area(area))
+                        showCommands(.area(area))
                     } label: { Label("更多", systemImage: "ellipsis").frame(minHeight: 44) }
                     .accessibilityIdentifier("areaMore")
                 }
@@ -329,10 +330,11 @@ struct MapWorkspace: View {
     }
 
     private func commandPanel(_ commands: WorkspaceCommands) -> some View {
-        NavigationStack {
+        let presentationID = commandPresentationID
+        return NavigationStack {
             List {
                 switch commands {
-                case .tools: toolCommands
+                case .tools: toolCommands(presentationID: presentationID)
                 case .selected(let item): selectedCommands(item).disabled(busy)
                 case .draft: draftCommands.disabled(busy)
                 case .display: displayCommands
@@ -352,7 +354,7 @@ struct MapWorkspace: View {
         .accessibilityIdentifier("commandPanel")
     }
 
-    @ViewBuilder private var toolCommands: some View {
+    @ViewBuilder private func toolCommands(presentationID: UUID) -> some View {
         Section("地图与定位") {
             command("刷新地图（保留草稿）", icon: "arrow.clockwise", disabled: busy) { model.refresh() }
             if let draft, draft.version >= 0 {
@@ -363,11 +365,17 @@ struct MapWorkspace: View {
             command("节点列表", icon: "list.bullet", id: "nodesButton") { sheet = .nodes }
             command("地图对象列表", icon: "square.grid.2x2") { sheet = .objects }
             command("精确定位", icon: "scope") { sheet = .coordinates }
+            command("显示与计算", icon: "slider.horizontal.3") { showCommands(.display) }
         }
         Section("粘贴与导入") {
             command("导入流程图", icon: "square.and.arrow.down", disabled: editing || !canWrite) { sheet = .flow }
             command("粘贴", icon: "doc.on.clipboard", disabled: clipboard == nil || editing || !canWrite, action: beginPaste)
             PasteButton(payloadType: String.self) { values in
+                // Transferable loading can finish after this panel was closed.
+                // A stale result must neither close another editor nor queue a
+                // command without a corresponding dismissal callback.
+                guard presentationID == commandPresentationID,
+                      case .commands(.tools)? = sheet else { return }
                 performCommand { pasteSystem(values.first) }
             }
             .labelStyle(MapSystemPasteLabelStyle())
@@ -445,6 +453,11 @@ struct MapWorkspace: View {
                 if let index = interaction.selectedPoint { mutateDraft { try $0.removePoint(at: index) }; interaction.selectedPoint = nil }
             }
         }
+        Section("自动插点") {
+            command("自动插入到准星", icon: "plus.app", disabled: (draft?.points.count ?? 0) < 2) {
+                mutateDraft { try $0.insertPointAutomatically(interaction.cursor) }
+            }
+        }
         Section("整条草稿") {
             command("反转草稿方向", icon: "arrow.left.arrow.right") { mutateDraft { $0.reverse() } }
             command("撤回草稿一步", icon: "arrow.uturn.backward", disabled: history.isEmpty, action: undoDraft)
@@ -502,6 +515,10 @@ struct MapWorkspace: View {
         commandAfterDismiss = action
         sheet = nil
     }
+    private func showCommands(_ commands: WorkspaceCommands) {
+        commandPresentationID = UUID()
+        sheet = .commands(commands)
+    }
     private func didDismissSheet() {
         guard let action = commandAfterDismiss else { return }
         Task { @MainActor in
@@ -532,7 +549,7 @@ struct MapWorkspace: View {
             }
         case .node(let node): nodeEditor(node)
         case .newNode(let size, let point):
-            MapNodeEditor(userName: model.session?.userName ?? "", allNodes: map.logicalNodes, center: point, sideLength: size) { value in
+            MapNodeEditor(userName: model.session?.userName ?? "", allNodes: map.logicalNodes, snapshot: map, center: point, sideLength: size) { value in
                 _ = try await model.execute("已新增 LN") { try await $0.createLogicalNode(x: value.x, y: value.y, sideLength: value.sideLength, properties: value.properties, instanceParentCode: value.instanceParentCode, session: $1) }
                 lastNodeTemplate = value
                 if continuousNodes && value.sideLength != 18 { setPlacement(.newNode(value.sideLength)) } else { clearOperation() }
@@ -553,7 +570,7 @@ struct MapWorkspace: View {
     }
 
     private func nodeEditor(_ node: MapLogicalNode) -> some View {
-        MapNodeEditor(node: node, userName: model.session?.userName ?? "", allNodes: map.logicalNodes,
+        MapNodeEditor(node: node, userName: model.session?.userName ?? "", allNodes: map.logicalNodes, snapshot: map,
                       center: CGPoint(x: node.x, y: node.y), onSave: { value in
             _ = try await model.execute("已更新 LN") { try await $0.updateLogicalNode(node: node, properties: value.properties, session: $1) }
         }, onDelete: { selected in

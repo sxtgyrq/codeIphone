@@ -19,6 +19,7 @@ struct MapNodeEditor: View {
     let node: MapLogicalNode?
     let userName: String
     let allNodes: [MapLogicalNode]
+    let snapshot: MapSnapshot
     let onSave: (MapNodeEditorDraft) async throws -> Void
     let onDelete: ((MapLogicalNode) async throws -> Void)?
     let onMove: ((MapLogicalNode) -> Void)?
@@ -42,8 +43,10 @@ struct MapNodeEditor: View {
     @State private var error: String?
     @State private var confirmingDelete = false
     @State private var showBranchPicker = false
+    @State private var previewLocation: MapNodePreviewLocation?
+    @State private var conflictLocation: MapNodePreviewLocation?
 
-    init(node: MapLogicalNode? = nil, userName: String, allNodes: [MapLogicalNode], center: CGPoint,
+    init(node: MapLogicalNode? = nil, userName: String, allNodes: [MapLogicalNode], snapshot: MapSnapshot, center: CGPoint,
          sideLength: Int = 6, onSave: @escaping (MapNodeEditorDraft) async throws -> Void,
          onDelete: ((MapLogicalNode) async throws -> Void)? = nil,
          onMove: ((MapLogicalNode) -> Void)? = nil,
@@ -54,6 +57,7 @@ struct MapNodeEditor: View {
         self.node = node
         self.userName = userName
         self.allNodes = allNodes
+        self.snapshot = snapshot
         self.onSave = onSave
         self.onDelete = onDelete
         self.onMove = onMove
@@ -117,7 +121,15 @@ struct MapNodeEditor: View {
                 navigationSection
                 if let node { positionsSection(node) }
                 if let error {
-                    Section { Text(error).foregroundStyle(.red).accessibilityIdentifier("nodeEditorError") }
+                    Section {
+                        Text(error).foregroundStyle(.red).accessibilityIdentifier("nodeEditorError")
+                        if let conflictLocation {
+                            Button { previewLocation = conflictLocation } label: {
+                                Label("查看冲突 LN 的位置", systemImage: "map")
+                                    .frame(minHeight: 44)
+                            }.accessibilityIdentifier("previewNodeConflict")
+                        }
+                    }
                 }
                 if let node { actionsSection(node) }
             }
@@ -147,6 +159,10 @@ struct MapNodeEditor: View {
                 MapNodeSourcePicker(nodes: allNodes.filter { $0.sideLength == 6 }) { source in
                     logic = value == "True" ? source.properties.logicLanguage : "¬" + source.properties.logicLanguage
                 }
+            }
+            .sheet(item: $previewLocation) { location in
+                MapNodeLocationPreview(snapshot: snapshot, location: location)
+                    .presentationDetents([.large])
             }
             .accessibilityIdentifier("logicalNodeEditor")
         }
@@ -257,18 +273,18 @@ struct MapNodeEditor: View {
     }
 
     @ViewBuilder private var navigationSection: some View {
-        if onLocate != nil {
+        Group {
             if sideLength == 4, let sourceLogic = MapNodeEditorRules.branchSource(value: value, logic: logic) {
                 let sources = allNodes.filter { $0.sideLength == 6 && $0.properties.logicLanguage == sourceLogic }
                 Section("关联命题") {
-                    if sources.count == 1 { locateButton(sources[0], title: "定位关联 LN6") }
+                    if sources.count == 1 { locateButton(sources[0], title: "查看关联 LN6") }
                     else { Text("当前地图中没有唯一匹配的 LN6，请刷新或重新选择命题。").foregroundStyle(.secondary) }
                 }
             }
             if sideLength == 10 {
                 let parents = allNodes.filter { $0.sideLength == 12 && $0.properties.value == MapNodeEditorRules.instanceParent(value) }
                 if let parent = isAutomaticInstance ? automaticParent : parents.first {
-                    Section("所属类") { locateButton(parent, title: "定位所属 LN12") }
+                    Section("所属类") { locateButton(parent, title: "查看所属 LN12") }
                 }
             }
             if let node, sideLength == 6 {
@@ -290,12 +306,12 @@ struct MapNodeEditor: View {
     }
 
     private func locateButton(_ target: MapLogicalNode, title: String) -> some View {
-        Button { navigate(target, using: onLocate) } label: {
+        Button { previewLocation = MapNodePreviewLocation(node: target) } label: {
             VStack(alignment: .leading, spacing: 5) {
-                Label(title, systemImage: "location")
+                Label(title, systemImage: "map")
                 Text("X \(Self.coordinate(target.x)) · Y \(Self.coordinate(target.y))").font(.caption).foregroundStyle(.secondary)
             }.frame(minHeight: 44, alignment: .leading)
-        }
+        }.accessibilityIdentifier("previewNode-\(target.code)")
     }
 
     private func positionsSection(_ node: MapLogicalNode) -> some View {
@@ -335,7 +351,10 @@ struct MapNodeEditor: View {
 
     private func navigate(_ target: MapLogicalNode, using action: ((MapLogicalNode) -> Void)?) {
         guard !busy, let action else { return }
-        guard !changedProperties else { error = "节点内容尚未保存。请先保存，再移动、复制或定位其他节点。"; return }
+        guard !changedProperties else {
+            conflictLocation = nil
+            error = "节点内容尚未保存。请先保存，再移动、复制、连接或创建关联实例。"; return
+        }
         action(target)
         dismiss()
     }
@@ -346,7 +365,7 @@ struct MapNodeEditor: View {
         let defaults = MapNodeEditorRules.defaults(size: size)
         value = defaults.value; logic = defaults.logicLanguage; operandKind = defaults.operandKind
         followsClassValue = size == 12
-        automaticInstance = false; instanceParentCode = ""; error = nil
+        automaticInstance = false; instanceParentCode = ""; error = nil; conflictLocation = nil
     }
 
     private func changeValue(_ text: String) {
@@ -362,6 +381,7 @@ struct MapNodeEditor: View {
 
     private func save() {
         guard !busy, canEdit else { return }
+        conflictLocation = nil
         guard let centerX = Double(x), let centerY = Double(y), centerX.isFinite, centerY.isFinite,
               centerX.truncatingRemainder(dividingBy: 1) == 0.5, centerY.truncatingRemainder(dividingBy: 1) == 0.5 else {
             error = "中心 X、Y 都必须为整数＋0.5，例如 100.5。"; return
@@ -384,13 +404,21 @@ struct MapNodeEditor: View {
         Task { @MainActor in
             defer { busy = false }
             do { try await onSave(draft); dismiss() }
-            catch { self.error = error.localizedDescription }
+            catch {
+                if let apiError = error as? MapAPIError,
+                   ["DuplicateLogicalNodeValue", "DuplicateLogicalNodeLogic"].contains(apiError.code) {
+                    // These messages quote user-authored values/expressions.
+                    // Keep them verbatim even if location parsing fails.
+                    self.error = apiError.message
+                } else { self.error = error.localizedDescription }
+                conflictLocation = MapNodeConflictLocation.parse(error)
+            }
         }
     }
 
     private func delete() {
         guard !busy, canEdit, let node, let onDelete else { return }
-        busy = true; error = nil
+        busy = true; error = nil; conflictLocation = nil
         Task { @MainActor in
             defer { busy = false }
             do { try await onDelete(node); dismiss() }

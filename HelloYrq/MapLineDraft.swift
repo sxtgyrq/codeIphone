@@ -85,6 +85,34 @@ struct MapLineDraft: Equatable {
         renumber()
     }
 
+    /// Mirrors WPF's T command: consider every slot, including both ends, and
+    /// keep the first valid slot with the smallest increase in polyline length.
+    /// Full geometry checks and long-segment subdivision remain on the Server.
+    mutating func insertPointAutomatically(_ target: CGPoint) throws {
+        guard points.count >= 2 else { throw MapLineDraftError("至少已有两个节点后才能自动插点。") }
+        try Self.checkTarget(target)
+        let point = makePoint(Self.roundedPoint(target))
+        try checkDuplicate(point)
+        func length(_ a: MapLinePoint, _ b: MapLinePoint) -> Double {
+            let dx = Double(b.x - a.x), dy = Double(b.y - a.y)
+            return sqrt(dx * dx + dy * dy)
+        }
+        var bestIndex: Int?
+        var bestLengthChange = Double.infinity
+        for index in 0...points.count {
+            if index > 0 && !Self.isEightDirection(points[index - 1], point) { continue }
+            if index < points.count && !Self.isEightDirection(point, points[index]) { continue }
+            let left = index > 0 ? length(points[index - 1], point) : 0
+            let right = index < points.count ? length(point, points[index]) : 0
+            let previous = index > 0 && index < points.count ? length(points[index - 1], points[index]) : 0
+            let change = left + right - previous
+            if change < bestLengthChange { bestLengthChange = change; bestIndex = index }
+        }
+        guard let bestIndex else { throw MapLineDraftError("插入后相邻线段不符合八方向约束，无法插入这个节点。") }
+        points.insert(point, at: bestIndex)
+        renumber()
+    }
+
     mutating func movePoint(at index: Int, to target: CGPoint) throws {
         try Self.checkTarget(target)
         let rounded = Self.roundedPoint(target)
