@@ -50,12 +50,13 @@ private final class MapUITestProtocol: URLProtocol {
             }
         }
         let empty = scenario == "empty"
+        let unitDetail = scenario == "unit-detail"
         switch path {
-        case "GetAllLineData": envelope(data: empty ? [] : Self.lines)
-        case "GetAllCrossData": envelope(data: empty ? [] : Self.crosses)
+        case "GetAllLineData": envelope(data: empty ? [] : unitDetail ? Self.unitLines : Self.lines)
+        case "GetAllCrossData": envelope(data: empty || unitDetail ? [] : Self.crosses)
         case "GetLogicalNodes":
             Self.lock.lock(); let reads = Self.lineReads; Self.lock.unlock()
-            var result = empty ? [] : Self.nodes
+            var result = empty || unitDetail ? [] : Self.nodes
             if scenario == "success" && reads > 1 {
                 result.append(["code": "IIIIIIIIII", "owner": "demo", "version": 1,
                                "x": 300.5, "y": 160.5, "sideLength": 12,
@@ -91,6 +92,12 @@ private final class MapUITestProtocol: URLProtocol {
     private static var lines: [[String: Any]] {
         [line("BBBBBBBBBB", points: [[80,110],[275,110]], reverse: 0),
          line("AAAAAAAAAA", points: [[225,90],[225,135]], reverse: 1)]
+    }
+
+    private static var unitLines: [[String: Any]] {
+        [line("BBBBBBBBBB", points: [[100,100],[101,100]], reverse: 0),
+         line("AAAAAAAAAA", points: [[102,100],[102,101]], reverse: 0),
+         line("CCCCCCCCCC", points: [[100,101],[101,102]], reverse: 0)]
     }
 
     private static var crosses: [[String: Any]] {

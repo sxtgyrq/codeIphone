@@ -90,7 +90,7 @@ struct MapCanvasView: View {
             .onChanged { value in
                 if pinchScale == nil { pinchScale = scale }
                 guard let initial = pinchScale, value.isFinite, value > 0 else { return }
-                scale = min(64, max(0.0001, initial * value))
+                scale = min(MapTransform.maximumScale, max(0.0001, initial * value))
             }
             .onEnded { _ in pinchScale = nil }
     }
@@ -346,6 +346,8 @@ struct MapCanvasView: View {
             VStack(spacing: 3) {
                 Text("\(coordinate(transform.gridStep)) 单位")
                     .font(.system(size: 9, design: .monospaced))
+                    .accessibilityIdentifier("mapScale")
+                    .accessibilityValue("每单位 \(coordinate(transform.scale)) 点")
                 Rectangle().frame(width: transform.gridStep * transform.scale, height: 1)
             }
             .padding(5)
@@ -426,7 +428,10 @@ struct MapCanvasView: View {
     }
 }
 
-private struct MapTransform {
+struct MapTransform {
+    // At maximum zoom, one integer coordinate step is clearly visible on a phone.
+    static let maximumScale: CGFloat = 128
+
     let center: CGPoint
     let scale: CGFloat
     let size: CGSize
@@ -442,6 +447,6 @@ private struct MapTransform {
         let target = 72 / scale
         let power = pow(10, floor(log10(target)))
         let unit = target / power
-        return (unit <= 1 ? 1 : unit <= 2 ? 2 : unit <= 5 ? 5 : 10) * power
+        return max(1, (unit <= 1 ? 1 : unit <= 2 ? 2 : unit <= 5 ? 5 : 10) * power)
     }
 }

@@ -70,6 +70,34 @@ final class HelloYrqUITests: XCTestCase {
         screenshot(app, "NOT 节点详情")
     }
 
+    func testMaximumZoomShowsOneUnitGridAndShortLines() {
+        let app = launch("unit-detail")
+        login(app)
+        XCTAssertTrue(app.staticTexts["mapCounts"].waitForExistence(timeout: 15))
+        XCTAssertEqual(app.staticTexts["mapCounts"].label, "线路 3 · LN 0 · Cross 0")
+        let canvas = app.descendants(matching: .any)["logicMap"].firstMatch
+        let scale = app.staticTexts["mapScale"]
+        XCTAssertTrue(scale.waitForExistence(timeout: 5))
+        let fittedScale = scale.value as? String
+        for _ in 0..<8 {
+            if scale.value as? String == "每单位 128 点" { break }
+            canvas.pinch(withScale: 3, velocity: 2)
+        }
+        XCTAssertEqual(scale.value as? String, "每单位 128 点")
+        XCTAssertEqual(scale.label, "1 单位")
+        screenshot(app, "最大放大：1单位网格与短线")
+        app.buttons["refreshMap"].tap()
+        let refreshed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"),
+                                                  object: app.buttons["refreshMap"])
+        XCTAssertEqual(XCTWaiter.wait(for: [refreshed], timeout: 10), .completed)
+        XCTAssertEqual(scale.value as? String, "每单位 128 点")
+        canvas.pinch(withScale: 0.5, velocity: -1)
+        XCTAssertNotEqual(scale.value as? String, "每单位 128 点")
+        app.buttons["fitMap"].tap()
+        XCTAssertEqual(scale.value as? String, fittedScale)
+        screenshot(app, "短线地图恢复查看全部")
+    }
+
     func testInvalidPasswordStaysOnLogin() {
         let app = launch("invalid-login")
         login(app)
