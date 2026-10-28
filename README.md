@@ -2,7 +2,7 @@
 
 使用 SwiftUI 原生界面连接现有 ArgumentMap Server，支持 iOS 16 及以上。本轮已实现线路、Cross、LN、区域操作、撤销及流程图导入的触控编辑流程，沿用电脑版的账号、数据和服务端业务规则。
 
-**当前交付状态：这轮编辑版代码已实现，正在等待对应提交的云端编译与原生测试。** 真机安装、同一 Wi-Fi 连接及完整编辑验收仍需验证。旧版浏览或缩放版本的成功记录、旧 IPA，不能证明本轮编辑版已经验证通过。
+**当前交付版本：2026.10.29，构建 13。** 提交 `4df723e392aa4c9c51352c8b2bddd38f0b595e78` 已通过 ARM64 真机编译、98 项原生测试和 7 项工程检查，[云端运行记录](https://github.com/sxtgyrq/codeIphone/actions/runs/40745536896)。下载产物已核对来源、版本、测试摘要和 SHA256。真机签名安装、同一 Wi-Fi 连接及真实地图编辑验收仍需在手机上完成。
 
 ## 手机上的基本操作
 
@@ -80,9 +80,9 @@
 
 ## 版本日期
 
-登录页、进入后的地图主界面和操作指南显示 **版本 YYYY.MM.DD**，例如 `版本 2026.10.28`；账号菜单还显示构建号。这里的日期是随安装包固定的发布日期，不随手机当天日期变化。
+登录页、进入后的地图主界面和操作指南显示 **版本 YYYY.MM.DD**，例如 `版本 2026.10.29`；账号菜单还显示构建号。这里的日期是随安装包固定的发布日期，不随手机当天日期变化。
 
-`tools/generate_project.py` 默认按 UTC+8 的当天生成版本日期，也可通过环境变量 `RELEASE_DATE=2026.10.28` 固定指定发布日期。日期同时写入 `MARKETING_VERSION` 和 `ArgumentMapReleaseDate`；云构建设备包的构建号使用 `GITHUB_RUN_NUMBER`，同一天重建也能区分。
+`tools/generate_project.py` 默认按 UTC+8 的当天生成版本日期，也可通过环境变量 `RELEASE_DATE=2026.10.29` 固定指定发布日期。日期同时写入 `MARKETING_VERSION` 和 `ArgumentMapReleaseDate`；云构建设备包的构建号使用 `GITHUB_RUN_NUMBER`，同一天重建也能区分。
 
 ## 保存、冲突与撤销
 
@@ -115,7 +115,7 @@ Server 保持最终裁决权。所有写操作携带当前会话和接口要求�
 
 ## 协议兼容
 
-全部请求为 POST。`Login` 发送用户名、密码与 `dbPrefix: ArgumentMap`，接收裸 32 位十六进制 LoginCode；其余请求使用 `userName`、`loginCode`，解析 `{success,code,message,data}`。
+全部请求为 POST。`Login` 发送用户名、密码与 `dbPrefix: ArgumentMap`，接收裸 32 位十六进制 LoginCode；其余请求按各接口契约使用 `userName` 或 `owner`，携带 `loginCode`，解析 `{success,code,message,data}`。
 
 地图读取 `GetAllLineData`、`GetAllCrossData`、`GetLogicalNodes`，全部成功后一起更新画面。三次读取仍是 Server 的独立事务，不代表跨端编辑时的单一数据库快照。
 
@@ -129,7 +129,9 @@ Cross 传输继续使用二倍坐标 `x2/y2`，客户端只接受范围内偶数
 4. 在该次运行的 **Artifacts** 下载 `HelloYrq-unsigned-ipa` 并解压，得到 **`HelloYrq-unsigned.ipa`**。外层 Artifact ZIP 不是 IPA。
 5. 用 Windows 上的 iLoader 选择 IPA，签名后安装到 iPhone。使用与本次验证提交对应的产物。
 
-云端产物路径为 `build/HelloYrq-unsigned.ipa`。本机此前整理的交付位置为 `E:\project\codeIphone\build\delivery\ArgumentMap-unsigned.ipa`；该文件可能仍是旧版本，**只有下载并替换为本轮成功构建的产物后，才包含本轮编辑功能**。安装后可用界面版本日期、构建号和 Actions 提交核对。
+云端产物路径为 `build/HelloYrq-unsigned.ipa`。本机新版交付位置为 `E:\project\codeIphone\build\delivery\ArgumentMap-unsigned.ipa`，版本 **2026.10.29 / 构建 13**。同目录提供 `安装说明.txt`、测试摘要、验证报告和预览图；旧包保留在 `history` 目录。安装后可用界面版本日期、构建号和 Actions 提交核对。
+
+本轮 IPA 的 SHA256：`c9c40d73e0cdade8dca7945f340bffd4ae6d0f0267a0824da996cc10b815b030`。
 
 云编译不使用 Apple ID、密码或签名证书。未签名 IPA 不能直接点击安装，也不是 TestFlight 包；安装时需要在本机签名。
 
@@ -156,6 +158,8 @@ python -m unittest discover -s Tests -v
 ```
 
 Mac/Xcode 可运行 `bash tools/build_ios.sh`。Windows 不能编译 iOS 或执行 XCTest；本地配置检查通过不等于原生代码、模拟器及真机已验证。
+
+本轮构建 13 的实际结果：80 项原生单元测试及 18 项 iPhone UI 测试通过，失败与跳过均为 0；模拟器为 iPhone SE（第三代）/ iOS 26.2。本地 7 项工程检查通过。现有 Server 的区域粘贴、移动、删除专项回归另有 71 项通过，使用内存测试数据，没有向正式地图写入测试对象。
 
 - `HelloYrqTests`：截获请求的协议测试、模型与编辑规则测试，以及会话切换、版本冲突、不确定写入、撤销同 ID 恢复、计算调度等状态测试。
 - `HelloYrqUITests`：用 Debug 专用夹具覆盖登录、地图浏览及编辑交互；夹具只在显式 UI 测试启动参数下启用，不连接正式地图。
