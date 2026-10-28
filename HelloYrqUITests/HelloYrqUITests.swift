@@ -6,6 +6,7 @@ final class HelloYrqUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing"]
         app.launchEnvironment["MAP_UI_SCENARIO"] = scenario
+        installPasswordSavePromptMonitor()
         app.launch()
         return app
     }
@@ -18,10 +19,7 @@ final class HelloYrqUITests: XCTestCase {
         user.tap(); user.typeText("demo")
         let password = app.secureTextFields["password"]
         password.tap(); password.typeText("test-password\n")
-        // iOS Password AutoFill presents this system sheet inside the app after
-        // a successful login. Dismiss it as a user would before testing the map.
-        let notNow = app.buttons.matching(NSPredicate(format: "label IN %@", ["Not Now", "暂不"])).firstMatch
-        if notNow.waitForExistence(timeout: 5) { notNow.tap() }
+        waitForLoginOutcome(in: app)
     }
 
     private func screenshot(_ app: XCUIApplication, _ name: String) {
@@ -47,7 +45,7 @@ final class HelloYrqUITests: XCTestCase {
         XCTAssertTrue(counts.waitForExistence(timeout: 15))
         XCTAssertEqual(counts.label, "线路 2 · LN 6 · Cross 1")
         screenshot(app, "逻辑地图")
-        app.buttons["fitMap"].tap()
+        tapReadyControl(app.buttons["fitMap"], in: app)
         let canvas = app.descendants(matching: .any)["logicMap"].firstMatch
         XCTAssertTrue(canvas.waitForExistence(timeout: 5))
         let coordinates = app.staticTexts["mapCoordinates"]
@@ -58,17 +56,17 @@ final class HelloYrqUITests: XCTestCase {
         canvas.swipeLeft()
         let moved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", oldCoordinates), object: coordinates)
         XCTAssertEqual(XCTWaiter.wait(for: [moved], timeout: 5), .completed)
-        app.buttons["refreshMap"].tap()
+        tapReadyControl(app.buttons["refreshMap"], in: app)
         let updated = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "线路 2 · LN 7 · Cross 1"), object: counts)
         XCTAssertEqual(XCTWaiter.wait(for: [updated], timeout: 10), .completed)
-        app.buttons["moreTools"].tap()
-        app.buttons["nodesButton"].tap()
+        tapReadyControl(app.buttons["moreTools"], in: app)
+        tapReadyControl(app.buttons["nodesButton"], in: app)
         XCTAssertTrue(app.navigationBars["逻辑节点 · 7"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["¬(?)"].exists)
         screenshot(app, "逻辑节点列表")
-        app.staticTexts["¬(?)"].tap()
+        tapReadyControl(app.staticTexts["¬(?)"], in: app)
         XCTAssertTrue(app.buttons["selectedDetails"].waitForExistence(timeout: 5))
-        app.buttons["selectedDetails"].tap()
+        tapReadyControl(app.buttons["selectedDetails"], in: app)
         XCTAssertTrue(app.navigationBars["对象详情"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["¬(?)"].exists)
         screenshot(app, "NOT 节点详情")
@@ -94,7 +92,7 @@ final class HelloYrqUITests: XCTestCase {
         XCTAssertEqual(scale.label, "1 单位")
         XCTAssertEqual(coordinates.label, fittedCoordinates, "Zoom must keep the short lines in view")
         screenshot(app, "最大放大：1单位网格与短线")
-        app.buttons["refreshMap"].tap()
+        tapReadyControl(app.buttons["refreshMap"], in: app)
         let refreshed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"),
                                                   object: app.buttons["refreshMap"])
         XCTAssertEqual(XCTWaiter.wait(for: [refreshed], timeout: 10), .completed)
@@ -102,7 +100,7 @@ final class HelloYrqUITests: XCTestCase {
         XCTAssertEqual(coordinates.label, fittedCoordinates, "Refresh must preserve the viewport center")
         canvas.pinch(withScale: 0.5, velocity: -1)
         XCTAssertNotEqual(scale.value as? String, "每单位 128 点")
-        app.buttons["fitMap"].tap()
+        tapReadyControl(app.buttons["fitMap"], in: app)
         XCTAssertEqual(scale.value as? String, fittedScale)
         screenshot(app, "短线地图恢复查看全部")
     }
@@ -127,7 +125,7 @@ final class HelloYrqUITests: XCTestCase {
         let app = launch("expired")
         login(app)
         XCTAssertTrue(app.staticTexts["mapCounts"].waitForExistence(timeout: 15))
-        app.buttons["refreshMap"].tap()
+        tapReadyControl(app.buttons["refreshMap"], in: app)
         XCTAssertTrue(app.textFields["serverAddress"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["loginError"].label.contains("失效"))
         XCTAssertFalse(app.staticTexts["mapCounts"].exists)
@@ -138,7 +136,7 @@ final class HelloYrqUITests: XCTestCase {
         let app = launch("refresh-failure")
         login(app)
         XCTAssertTrue(app.staticTexts["mapCounts"].waitForExistence(timeout: 15))
-        app.buttons["refreshMap"].tap()
+        tapReadyControl(app.buttons["refreshMap"], in: app)
         XCTAssertTrue(app.staticTexts["mapError"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.staticTexts["mapCounts"].label, "线路 2 · LN 6 · Cross 1")
     }
@@ -154,8 +152,8 @@ final class HelloYrqUITests: XCTestCase {
         let app = launch()
         login(app)
         XCTAssertTrue(app.staticTexts["mapCounts"].waitForExistence(timeout: 15))
-        app.buttons["accountMenu"].tap()
-        app.buttons["logoutButton"].tap()
+        tapReadyControl(app.buttons["accountMenu"], in: app)
+        tapReadyControl(app.buttons["logoutButton"], in: app)
         XCTAssertTrue(app.textFields["serverAddress"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["loginButton"].isEnabled)
         XCTAssertFalse(app.staticTexts["mapCounts"].exists)

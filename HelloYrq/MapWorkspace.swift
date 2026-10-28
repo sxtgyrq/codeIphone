@@ -330,18 +330,25 @@ struct MapWorkspace: View {
 
     private func commandPanel(_ commands: WorkspaceCommands, presentationID: UUID) -> some View {
         NavigationStack {
-            List {
-                switch commands {
-                case .tools: toolCommands
-                case .selected(let item): selectedCommands(item).disabled(busy)
-                case .draft: draftCommands.disabled(busy)
-                case .display: displayCommands
-                case .area(let selected): areaCommands(selected)
+            VStack(spacing: 0) {
+                List {
+                    switch commands {
+                    case .tools: toolCommands
+                    case .selected(let item): selectedCommands(item).disabled(busy)
+                    case .draft: draftCommands.disabled(busy)
+                    case .display: displayCommands
+                    case .area(let selected): areaCommands(selected)
+                    }
                 }
-            }
-            .listStyle(.insetGrouped)
-            .safeAreaInset(edge: .bottom) {
-                if case .tools = commands { systemPaste(presentationID: presentationID) }
+                .listStyle(.insetGrouped)
+                .clipped()
+                .contentShape(Rectangle())
+                // Reserve real layout space for the footer. An overlaid inset
+                // leaves covered rows falsely hittable by accessibility taps.
+                if case .tools = commands {
+                    systemPaste(presentationID: presentationID)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .navigationTitle(commands.title).navigationBarTitleDisplayMode(.inline)
             .toolbar {

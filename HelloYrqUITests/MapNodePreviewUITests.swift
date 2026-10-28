@@ -7,19 +7,14 @@ final class MapNodePreviewUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing"]
         app.launchEnvironment["MAP_UI_SCENARIO"] = "editing"
+        installPasswordSavePromptMonitor()
         app.launch()
         let address = app.textFields["serverAddress"]
         XCTAssertTrue(address.waitForExistence(timeout: 10))
         address.tap(); address.typeText("http://192.168.0.100:61011")
         app.textFields["userName"].tap(); app.textFields["userName"].typeText("demo")
         app.secureTextFields["password"].tap(); app.secureTextFields["password"].typeText("test-password\n")
-        let notNow = app.buttons.matching(NSPredicate(format: "label IN %@", ["Not Now", "暂不"])).firstMatch
-        if notNow.waitForExistence(timeout: 6), notNow.isHittable { notNow.tap() }
-        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            if notNow.exists && notNow.isHittable { notNow.tap() }
-            return app.buttons["tool-node"].isHittable
-        }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 20), .completed)
+        waitForReadyControl(app.buttons["tool-node"], in: app, timeout: 20)
         tap(app.buttons["tool-node"], in: app)
         tap(app.buttons["objectList"], in: app)
         tap(app.buttons["node-CCCCCCCCCC"], in: app)
@@ -73,19 +68,21 @@ final class MapNodePreviewUITests: XCTestCase {
 
     private func tap(_ element: XCUIElement, in app: XCUIApplication) {
         reveal(element, in: app)
-        XCTAssertTrue(element.isEnabled)
-        element.tap()
+        tapReadyControl(element, in: app)
     }
 
     private func reveal(_ element: XCUIElement, in app: XCUIApplication, towardTop: Bool = false) {
-        let visible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND hittable == true"), object: element)
+        dismissKnownPasswordSavePrompt(in: app)
+        let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            if self.dismissKnownPasswordSavePrompt(in: app) { return false }
+            return element.exists && element.isHittable
+        }, object: nil)
         if XCTWaiter.wait(for: [visible], timeout: 3) == .completed { return }
         for _ in 0..<6 where !element.exists || !element.isHittable {
             let scroll = app.collectionViews.firstMatch.exists ? app.collectionViews.firstMatch : app.tables.firstMatch
             XCTAssertTrue(scroll.exists)
             if towardTop { scroll.swipeDown() } else { scroll.swipeUp() }
         }
-        XCTAssertTrue(element.exists)
-        XCTAssertTrue(element.isHittable)
+        waitForReadyControl(element, in: app)
     }
 }

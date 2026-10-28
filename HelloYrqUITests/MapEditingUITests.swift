@@ -8,6 +8,7 @@ final class MapEditingUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing"]
         app.launchEnvironment["MAP_UI_SCENARIO"] = "editing"
+        installPasswordSavePromptMonitor()
         app.launch()
         let address = app.textFields["serverAddress"]
         XCTAssertTrue(address.waitForExistence(timeout: 10))
@@ -15,16 +16,8 @@ final class MapEditingUITests: XCTestCase {
         address.tap(); address.typeText("http://192.168.0.100:61011")
         app.textFields["userName"].tap(); app.textFields["userName"].typeText("demo")
         app.secureTextFields["password"].tap(); app.secureTextFields["password"].typeText("test-password\n")
-        let notNow = app.buttons.matching(NSPredicate(format: "label IN %@", ["Not Now", "暂不"])).firstMatch
-        if notNow.waitForExistence(timeout: 6), notNow.isHittable { notNow.tap() }
         XCTAssertTrue(app.staticTexts["mapCounts"].waitForExistence(timeout: 15))
-        // Map counts can exist behind the system Password AutoFill sheet. Wait
-        // for an actual touch target and dismiss only the recognized prompt.
-        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            if notNow.exists && notNow.isHittable { notNow.tap() }
-            return app.buttons["tool-line"].isHittable
-        }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15), .completed)
+        waitForReadyControl(app.buttons["tool-line"], in: app)
         expectCounts(app, lines: 2, nodes: 6, crosses: 1)
         XCTAssertTrue(app.staticTexts["releaseVersion"].exists)
         if captureScreens { screenshot(app, "手机地图主页与发布日期") }
@@ -39,21 +32,18 @@ final class MapEditingUITests: XCTestCase {
     private func tap(_ app: XCUIApplication, _ identifier: String, file: StaticString = #filePath, line: UInt = #line) {
         let button = app.buttons[identifier]
         reveal(app, button)
-        XCTAssertTrue(button.exists, identifier, file: file, line: line)
-        if !button.isEnabled {
-            let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: button)
-            XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 10), .completed, identifier, file: file, line: line)
-        }
-        XCTAssertTrue(button.isEnabled, identifier, file: file, line: line)
-        XCTAssertTrue(button.isHittable, identifier, file: file, line: line)
-        button.tap()
+        tapReadyControl(button, in: app, file: file, line: line)
     }
 
     private func reveal(_ app: XCUIApplication, _ element: XCUIElement) {
+        dismissKnownPasswordSavePrompt(in: app)
         if element.exists && element.isHittable { return }
         // A saved sheet can still be animating away while the underlying view
         // already exists. Let the transition finish before scrolling a form.
-        let visible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND hittable == true"), object: element)
+        let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            if self.dismissKnownPasswordSavePrompt(in: app) { return false }
+            return element.exists && element.isHittable
+        }, object: nil)
         if XCTWaiter.wait(for: [visible], timeout: 3) == .completed { return }
         for _ in 0..<6 where !element.exists || !element.isHittable { scrollForm(app) }
     }
