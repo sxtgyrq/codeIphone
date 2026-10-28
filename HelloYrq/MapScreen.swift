@@ -1,135 +1,8 @@
 import SwiftUI
 
-@MainActor
-struct MapScreen: View {
-    @ObservedObject var model: MapViewModel
-    @State private var showArrows = true
-    @State private var showLabels = true
-    @State private var showCrosses = true
-    @State private var fitRequest = 0
-    @State private var selection: MapSelection?
-    @State private var showNodes = false
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                statusBar
-                ZStack {
-                    if let map = model.snapshot {
-                        MapCanvasView(snapshot: map, showArrows: showArrows, showLabels: showLabels,
-                                      showCrosses: showCrosses, fitRequest: fitRequest,
-                                      onSelect: { selection = $0 })
-                        if map.lines.allSatisfy({ $0.nodes.isEmpty }) && map.logicalNodes.isEmpty {
-                            VStack(spacing: 10) {
-                                Image(systemName: "square.dashed").font(.largeTitle)
-                                Text("地图暂时为空").font(.headline)
-                                Text("在电脑版保存地图后，点击刷新。")
-                                    .font(.subheadline).foregroundStyle(.secondary)
-                            }.padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
-                        }
-                    } else {
-                        Color(uiColor: .systemGroupedBackground)
-                        VStack(spacing: 16) {
-                            if model.isWorking {
-                                ProgressView()
-                                Text("正在读取逻辑地图…")
-                            } else {
-                                Image(systemName: "wifi.exclamationmark").font(.largeTitle)
-                                Text("地图尚未加载").font(.headline)
-                                Button("重新加载") { model.refresh() }.buttonStyle(.borderedProminent)
-                                    .accessibilityIdentifier("retryMap")
-                            }
-                        }
-                    }
-                    if model.isWorking && model.snapshot != nil {
-                        VStack { HStack { Spacer(); ProgressView().padding(12).background(.regularMaterial, in: Capsule()) }; Spacer() }.padding()
-                            .allowsHitTesting(false)
-                    }
-                }
-                controls
-            }
-            .navigationTitle("逻辑地图").navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Menu {
-                        Text(model.session?.userName ?? "")
-                        Text(model.serverAddress)
-                        Button("退出登录", role: .destructive) { model.logout() }
-                            .accessibilityIdentifier("logoutButton")
-                    } label: { Label("账号", systemImage: "person.crop.circle") }
-                    .accessibilityIdentifier("accountMenu")
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { showNodes = true } label: { Label("节点列表", systemImage: "list.bullet") }
-                        .disabled(model.snapshot == nil).accessibilityIdentifier("nodesButton")
-                }
-            }
-            .sheet(item: $selection) { item in
-                MapObjectDetails(selection: item).presentationDetents([.medium, .large])
-            }
-            .sheet(isPresented: $showNodes) {
-                MapNodeList(nodes: model.snapshot?.logicalNodes ?? [])
-            }
-        }
-    }
-
-    private var statusBar: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            if let map = model.snapshot {
-                HStack {
-                    Text("线路 \(map.lines.filter { !$0.nodes.isEmpty }.count) · LN \(map.logicalNodes.count) · Cross \(map.crosses.count)")
-                        .font(.caption).accessibilityIdentifier("mapCounts")
-                    Spacer()
-                    if let time = model.lastRefresh {
-                        Text(time, style: .time).font(.caption2).foregroundStyle(.secondary)
-                    }
-                }
-            }
-            if let error = model.errorMessage {
-                Label(error, systemImage: "exclamationmark.circle")
-                    .font(.caption).foregroundStyle(.red).accessibilityIdentifier("mapError")
-                if model.snapshot != nil { Text("当前显示上次成功加载的地图。").font(.caption2).foregroundStyle(.secondary) }
-            } else {
-                Text("单指拖动 · 双指缩放 · 点选查看详情")
-                    .font(.caption2).foregroundStyle(.secondary)
-            }
-        }
-        .padding(.horizontal, 16).padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(uiColor: .secondarySystemBackground))
-    }
-
-    private var controls: some View {
-        HStack {
-            Button { fitRequest += 1 } label: {
-                Label("查看全部", systemImage: "arrow.up.left.and.arrow.down.right")
-                    .frame(minHeight: 44).contentShape(Rectangle())
-            }
-                .disabled(model.snapshot == nil).accessibilityIdentifier("fitMap")
-            Spacer()
-            Button { model.refresh() } label: {
-                Label("刷新", systemImage: "arrow.clockwise")
-                    .frame(minHeight: 44).contentShape(Rectangle())
-            }
-                .disabled(model.isWorking).accessibilityIdentifier("refreshMap")
-            Spacer()
-            Menu {
-                Toggle("线路箭头", isOn: $showArrows)
-                Toggle("LN 标签", isOn: $showLabels)
-                Toggle("Cross 交点", isOn: $showCrosses)
-            } label: {
-                Label("显示", systemImage: "slider.horizontal.3")
-                    .frame(minHeight: 44).contentShape(Rectangle())
-            }
-            .accessibilityIdentifier("displayMenu")
-        }
-        .font(.subheadline).padding(.horizontal, 18).frame(minHeight: 54)
-        .background(.regularMaterial)
-    }
-}
-
 struct MapNodeList: View {
     let nodes: [MapLogicalNode]
+    var onChoose: ((MapLogicalNode) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
     @State private var selection: MapSelection?
@@ -144,7 +17,10 @@ struct MapNodeList: View {
     var body: some View {
         NavigationStack {
             List(filtered) { node in
-                Button { selection = .logicalNode(node) } label: {
+                Button {
+                    if let onChoose { onChoose(node); dismiss() }
+                    else { selection = .logicalNode(node) }
+                } label: {
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {
                             Text("LN\(node.sideLength)").font(.caption.monospaced()).foregroundStyle(.secondary)

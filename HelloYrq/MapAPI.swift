@@ -7,7 +7,15 @@ struct MapAPIError: LocalizedError, Equatable, Sendable {
     let code: String
     let message: String
 
-    var errorDescription: String? { message }
+    var errorDescription: String? {
+        var text = message
+        for (desktop, touch) in [("按 F6", "点击“保存线路”"), ("按 F4", "点击“刷新”"),
+                                  ("按 F3", "点击“刷新”"), ("按 F2", "点击“刷新”"),
+                                  ("按 K", "点击“计算交点”"), ("按 J", "点击“重算 LN 关联”")] {
+            text = text.replacingOccurrences(of: desktop, with: touch)
+        }
+        return text
+    }
     var isSessionExpired: Bool { code == "LoginExpired" }
 }
 
@@ -110,8 +118,8 @@ struct MapAPI {
         let data: Value?
     }
 
-    private func post<Body: Encodable, Value: Decodable>(_ path: String, body: Body) async throws -> Value {
-        let (data, response) = try await send(path, body: body)
+    func post<Body: Encodable, Value: Decodable>(_ path: String, body: Body, timeoutInterval: TimeInterval = 30) async throws -> Value {
+        let (data, response) = try await send(path, body: body, timeoutInterval: timeoutInterval)
         try checkStatus(response, data: data)
         let decoder = JSONDecoder()
         // Decode business errors before the typed payload: failure data may be null
@@ -142,13 +150,13 @@ struct MapAPI {
         }
     }
 
-    private func send<Body: Encodable>(_ path: String, body: Body) async throws -> (Data, HTTPURLResponse) {
+    private func send<Body: Encodable>(_ path: String, body: Body, timeoutInterval: TimeInterval = 30) async throws -> (Data, HTTPURLResponse) {
         try Task.checkCancellation()
         var request = URLRequest(url: serverURL.appendingPathComponent(path))
         request.httpMethod = "POST"
         request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
         request.setValue(path == "Login" ? "text/plain" : "application/json", forHTTPHeaderField: "Accept")
-        request.timeoutInterval = 30
+        request.timeoutInterval = timeoutInterval
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.httpBody = try JSONEncoder().encode(body)
         do {

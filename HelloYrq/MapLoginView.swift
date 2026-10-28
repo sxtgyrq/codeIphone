@@ -15,8 +15,10 @@ struct MapLoginView: View {
                         Image(systemName: "point.3.connected.trianglepath.dotted")
                             .font(.system(size: 38)).foregroundStyle(.indigo)
                         Text("让逻辑，随手可见").font(.largeTitle.bold())
-                        Text("连接电脑上的 Argument Map，浏览同一张逻辑地图。")
+                        Text("连接电脑上的 Argument Map，随手绘制、整理同一张逻辑地图。")
                             .foregroundStyle(.secondary)
+                        Text(AppRelease.title).font(.subheadline.monospaced()).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("releaseVersion")
                     }
                     VStack(alignment: .leading, spacing: 18) {
                         VStack(alignment: .leading, spacing: 6) {

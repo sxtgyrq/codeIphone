@@ -15,6 +15,16 @@
 			"isa" = "PBXBuildFile";
 			"fileRef" = "792144FD5176EA5A0D115EFD";
 		};
+		"3ED5261A0A59C871174D01F8" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "MapAdvancedEditors.swift";
+			"sourceTree" = "<group>";
+		};
+		"4B029B081B0783D3D321E60B" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "3ED5261A0A59C871174D01F8";
+		};
 		"F8F7115160B800E300872E86" = {
 			"isa" = "PBXFileReference";
 			"lastKnownFileType" = "sourcecode.swift";
@@ -35,6 +45,66 @@
 			"isa" = "PBXBuildFile";
 			"fileRef" = "261CFB3E28B9E90E85815CB6";
 		};
+		"7BB5A5C0EE05AB6A9F003EAE" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "MapCrossEditor.swift";
+			"sourceTree" = "<group>";
+		};
+		"039A35BEBD910478B29B991F" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "7BB5A5C0EE05AB6A9F003EAE";
+		};
+		"6F234AF163C28E14CBE72939" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "MapEditingAPI.swift";
+			"sourceTree" = "<group>";
+		};
+		"B0943149D034D1D24B3E8403" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "6F234AF163C28E14CBE72939";
+		};
+		"826EF50765F1600D28EA877D" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "MapEditingModels.swift";
+			"sourceTree" = "<group>";
+		};
+		"46C8D813DCE793B0DC42AF3E" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "826EF50765F1600D28EA877D";
+		};
+		"CDB4C5E28210DC8C529D7C78" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "MapInteraction.swift";
+			"sourceTree" = "<group>";
+		};
+		"C68EBB6A42FBA08FD526E154" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "CDB4C5E28210DC8C529D7C78";
+		};
+		"A21E59210684D6766ECA5126" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "MapLineDraft.swift";
+			"sourceTree" = "<group>";
+		};
+		"71E808234F764338526EEB11" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "A21E59210684D6766ECA5126";
+		};
+		"BF84B011F40FFCC75EDEAAA4" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "MapLineEditor.swift";
+			"sourceTree" = "<group>";
+		};
+		"5745213251B72841DEE401EB" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "BF84B011F40FFCC75EDEAAA4";
+		};
 		"24EF1014FC14D0E209039F2D" = {
 			"isa" = "PBXFileReference";
 			"lastKnownFileType" = "sourcecode.swift";
@@ -54,6 +124,16 @@
 		"54412F5371C8594CA22069D4" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "DF030D523DDCA60DBA93D14E";
+		};
+		"ADFBF266F7ABC641F6B2C33B" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "MapNodeEditor.swift";
+			"sourceTree" = "<group>";
+		};
+		"01F0FAE8409AD2C4FBB4EE6A" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "ADFBF266F7ABC641F6B2C33B";
 		};
 		"CC2FAEBC68C6B47686B1FB2B" = {
 			"isa" = "PBXFileReference";
@@ -85,6 +165,26 @@
 			"isa" = "PBXBuildFile";
 			"fileRef" = "7C73B88D5763605CD22E97A1";
 		};
+		"2A6FC0F99522F1045A95DD58" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "MapWorkspace.swift";
+			"sourceTree" = "<group>";
+		};
+		"B3ECF41CDC6BEF68C074E10A" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "2A6FC0F99522F1045A95DD58";
+		};
+		"3338D666BD1CC4D90C29B831" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "MapWorkspaceSupporting.swift";
+			"sourceTree" = "<group>";
+		};
+		"2555E6724FFAE0209DEBE0D5" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "3338D666BD1CC4D90C29B831";
+		};
 		"1EB3FD693F85514718303BCE" = {
 			"isa" = "PBXFileReference";
 			"lastKnownFileType" = "sourcecode.swift";
@@ -94,6 +194,46 @@
 		"31B0CDE15CCEBC70E55832A3" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "1EB3FD693F85514718303BCE";
+		};
+		"00B682DB416899775B379B7C" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "MapEditingAPITests.swift";
+			"sourceTree" = "<group>";
+		};
+		"B6BEAD8733B96A45BEE41AD3" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "00B682DB416899775B379B7C";
+		};
+		"61888AC1510E2DE57C1DFDD0" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "MapLineDraftTests.swift";
+			"sourceTree" = "<group>";
+		};
+		"59F46FABAAEBD7A723426F76" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "61888AC1510E2DE57C1DFDD0";
+		};
+		"91214C178E4B10F7A9B08947" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "MapNodeEditorTests.swift";
+			"sourceTree" = "<group>";
+		};
+		"853338E7CC13F7C4DFB491A3" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "91214C178E4B10F7A9B08947";
+		};
+		"D892CDC4AFBE3E9C5225275F" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "MapSplitPreviewTests.swift";
+			"sourceTree" = "<group>";
+		};
+		"A4029EF0ABA4AE107B3F41FF" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "D892CDC4AFBE3E9C5225275F";
 		};
 		"94D2DD8E5CD0EE3B219085D4" = {
 			"isa" = "PBXFileReference";
@@ -105,6 +245,16 @@
 			"isa" = "PBXBuildFile";
 			"fileRef" = "94D2DD8E5CD0EE3B219085D4";
 		};
+		"AC2EF5C405E4A8DEDF2B3672" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "MapViewModelTests.swift";
+			"sourceTree" = "<group>";
+		};
+		"AF4EFA9CE46B7DD57BFECD15" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "AC2EF5C405E4A8DEDF2B3672";
+		};
 		"8BC2492C702FC0324D8E4775" = {
 			"isa" = "PBXFileReference";
 			"lastKnownFileType" = "sourcecode.swift";
@@ -114,6 +264,16 @@
 		"245B1C70536BFEFCF68A9E62" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "8BC2492C702FC0324D8E4775";
+		};
+		"C684C567D1CB7A7111B1C9FF" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "sourcecode.swift";
+			"path" = "MapEditingUITests.swift";
+			"sourceTree" = "<group>";
+		};
+		"1D33A539DA377A91869E4505" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "C684C567D1CB7A7111B1C9FF";
 		};
 		"9431AB469740A0DA7E28EAAD" = {
 			"isa" = "PBXFileReference";
@@ -126,6 +286,16 @@
 			"lastKnownFileType" = "folder.assetcatalog";
 			"path" = "Assets.xcassets";
 			"sourceTree" = "<group>";
+		};
+		"6977915562A3F4444FD34655" = {
+			"isa" = "PBXFileReference";
+			"lastKnownFileType" = "net.daringfireball.markdown";
+			"path" = "FlowDiagramLanguage.md";
+			"sourceTree" = "<group>";
+		};
+		"ADE05C944F60EC28FDEA17B7" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "6977915562A3F4444FD34655";
 		};
 		"407FCDA545C8EB8CB1F07D40" = {
 			"isa" = "PBXFileReference";
@@ -162,15 +332,26 @@
 			"isa" = "PBXGroup";
 			"children" = (
 				"792144FD5176EA5A0D115EFD",
+				"3ED5261A0A59C871174D01F8",
 				"F8F7115160B800E300872E86",
 				"261CFB3E28B9E90E85815CB6",
+				"7BB5A5C0EE05AB6A9F003EAE",
+				"6F234AF163C28E14CBE72939",
+				"826EF50765F1600D28EA877D",
+				"CDB4C5E28210DC8C529D7C78",
+				"A21E59210684D6766ECA5126",
+				"BF84B011F40FFCC75EDEAAA4",
 				"24EF1014FC14D0E209039F2D",
 				"DF030D523DDCA60DBA93D14E",
+				"ADFBF266F7ABC641F6B2C33B",
 				"CC2FAEBC68C6B47686B1FB2B",
 				"D191CAB10C16C0BF16F65153",
 				"7C73B88D5763605CD22E97A1",
+				"2A6FC0F99522F1045A95DD58",
+				"3338D666BD1CC4D90C29B831",
 				"9431AB469740A0DA7E28EAAD",
 				"8D4966BAF50D72FA422E8BA8",
+				"6977915562A3F4444FD34655",
 			);
 			"path" = "HelloYrq";
 			"sourceTree" = "<group>";
@@ -179,7 +360,12 @@
 			"isa" = "PBXGroup";
 			"children" = (
 				"1EB3FD693F85514718303BCE",
+				"00B682DB416899775B379B7C",
+				"61888AC1510E2DE57C1DFDD0",
+				"91214C178E4B10F7A9B08947",
+				"D892CDC4AFBE3E9C5225275F",
 				"94D2DD8E5CD0EE3B219085D4",
+				"AC2EF5C405E4A8DEDF2B3672",
 			);
 			"path" = "HelloYrqTests";
 			"sourceTree" = "<group>";
@@ -188,6 +374,7 @@
 			"isa" = "PBXGroup";
 			"children" = (
 				"8BC2492C702FC0324D8E4775",
+				"C684C567D1CB7A7111B1C9FF",
 			);
 			"path" = "HelloYrqUITests";
 			"sourceTree" = "<group>";
@@ -254,7 +441,7 @@
 				"ASSETCATALOG_COMPILER_APPICON_NAME" = "AppIcon";
 				"GENERATE_INFOPLIST_FILE" = "NO";
 				"CURRENT_PROJECT_VERSION" = "1";
-				"MARKETING_VERSION" = "1.0";
+				"MARKETING_VERSION" = "2026.10.28";
 				"LD_RUNPATH_SEARCH_PATHS" = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -276,7 +463,7 @@
 				"ASSETCATALOG_COMPILER_APPICON_NAME" = "AppIcon";
 				"GENERATE_INFOPLIST_FILE" = "NO";
 				"CURRENT_PROJECT_VERSION" = "1";
-				"MARKETING_VERSION" = "1.0";
+				"MARKETING_VERSION" = "2026.10.28";
 				"LD_RUNPATH_SEARCH_PATHS" = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -298,13 +485,23 @@
 			"buildActionMask" = "2147483647";
 			"files" = (
 				"06B37C48616F44A51D5CEB08",
+				"4B029B081B0783D3D321E60B",
 				"35CE4454BD6F1C99C4C2734D",
 				"27C105E871A000061003CE63",
+				"039A35BEBD910478B29B991F",
+				"B0943149D034D1D24B3E8403",
+				"46C8D813DCE793B0DC42AF3E",
+				"C68EBB6A42FBA08FD526E154",
+				"71E808234F764338526EEB11",
+				"5745213251B72841DEE401EB",
 				"BF09300080F87941ED6B8148",
 				"54412F5371C8594CA22069D4",
+				"01F0FAE8409AD2C4FBB4EE6A",
 				"3F2AC57BC78952581604DA3C",
 				"B0E05695B44EBFF3FECB4109",
 				"1AA90874702CCE8B046D02FF",
+				"B3ECF41CDC6BEF68C074E10A",
+				"2555E6724FFAE0209DEBE0D5",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -324,6 +521,7 @@
 			"buildActionMask" = "2147483647";
 			"files" = (
 				"88830B769758E01518B042A1",
+				"ADE05C944F60EC28FDEA17B7",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -424,7 +622,12 @@
 			"buildActionMask" = "2147483647";
 			"files" = (
 				"31B0CDE15CCEBC70E55832A3",
+				"B6BEAD8733B96A45BEE41AD3",
+				"59F46FABAAEBD7A723426F76",
+				"853338E7CC13F7C4DFB491A3",
+				"A4029EF0ABA4AE107B3F41FF",
 				"B39E0DFAC0DA05889B0E8161",
+				"AF4EFA9CE46B7DD57BFECD15",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};
@@ -504,6 +707,7 @@
 			"buildActionMask" = "2147483647";
 			"files" = (
 				"245B1C70536BFEFCF68A9E62",
+				"1D33A539DA377A91869E4505",
 			);
 			"runOnlyForDeploymentPostprocessing" = "0";
 		};

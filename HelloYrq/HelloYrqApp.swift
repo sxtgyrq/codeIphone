@@ -8,7 +8,7 @@ struct HelloYrqApp: App {
         WindowGroup {
             Group {
                 if model.session == nil { MapLoginView(model: model) }
-                else { MapScreen(model: model) }
+                else { MapWorkspace(model: model) }
             }
             .tint(.indigo)
         }

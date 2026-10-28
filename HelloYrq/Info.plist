@@ -20,12 +20,14 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ArgumentMapReleaseDate</key>
+	<string>2026.10.28</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>连接同一局域网中的 ArgumentMap Server，登录并查看逻辑地图。</string>
+	<string>连接同一局域网中的 ArgumentMap Server，登录、查看与编辑逻辑地图。</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

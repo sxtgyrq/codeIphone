@@ -16,21 +16,24 @@ enum MapSelection: Identifiable {
     }
 }
 
-/// A read-only projection of the server snapshot. All gestures change only the viewport.
+/// Drawing and gestures remain local; only explicit Save/Confirm actions write to Server.
+@MainActor
 struct MapCanvasView: View {
+    @ObservedObject var interaction: MapInteraction
     let snapshot: MapSnapshot
     let showArrows: Bool
     let showLabels: Bool
     let showCrosses: Bool
     let fitRequest: Int
     var onSelect: (MapSelection?) -> Void
+    var onPoint: ((CGPoint) -> Void)? = nil
 
     @State private var center = CGPoint(x: 250_000, y: 250_000)
     @State private var scale: CGFloat = 1
     @State private var hasFitted = false
     @State private var dragOrigin: CGPoint?
     @State private var pinchScale: CGFloat?
-    @State private var selectedID: String?
+    private var selectedID: String? { interaction.selectedID }
 
     private var hasRenderableContent: Bool {
         snapshot.lines.contains { !$0.nodes.isEmpty } || !snapshot.logicalNodes.isEmpty || snapshot.crosses.contains(where: valid)
@@ -48,11 +51,17 @@ struct MapCanvasView: View {
                 .gesture(panGesture)
                 .simultaneousGesture(zoomGesture)
                 .simultaneousGesture(SpatialTapGesture().onEnded { event in
+                    if interaction.showCursor {
+                        let point = transform.world(event.location)
+                        center = bounded(point)
+                        interaction.cursor = center
+                        onPoint?(center)
+                        return
+                    }
                     let selection = hitTest(event.location, transform: transform)
-                    selectedID = selection?.id
                     onSelect(selection)
                 })
-                .accessibilityLabel("只读逻辑地图，\(snapshot.lines.count) 条线路，\(snapshot.logicalNodes.count) 个逻辑节点")
+                .accessibilityLabel("逻辑地图，\(snapshot.lines.count) 条线路，\(snapshot.logicalNodes.count) 个逻辑节点")
                 .accessibilityHint("单指拖动平移，双指捏合缩放，轻点对象查看资料。")
                 .accessibilityIdentifier("logicMap")
                 .accessibilityAction(named: Text("查看全部")) { fit(in: geometry.size) }
@@ -71,6 +80,17 @@ struct MapCanvasView: View {
                 if !hasFitted { fit(in: size) }
             }
             .onChange(of: fitRequest) { _ in fit(in: geometry.size) }
+            .onChange(of: center) { interaction.cursor = $0 }
+            .onChange(of: scale) { interaction.currentScale = $0 }
+            .onChange(of: interaction.focus?.id) { _ in
+                guard let request = interaction.focus else { return }
+                center = bounded(request.point)
+                if let requestedScale = request.scale { scale = min(MapTransform.maximumScale, max(0.0001, requestedScale)) }
+            }
+            .onChange(of: interaction.zoomRequest) { value in
+                guard value != 0 else { return }
+                scale = min(MapTransform.maximumScale, max(0.0001, scale * (value > 0 ? 1.6 : 0.625)))
+            }
         }
     }
 
@@ -119,6 +139,7 @@ struct MapCanvasView: View {
         for cross in snapshot.crosses where valid(cross) {
             include(CGPoint(x: CGFloat(cross.x), y: CGFloat(cross.y)))
         }
+        for point in interaction.continuation { include(CGPoint(x: point.x, y: point.y)) }
         guard minX.isFinite, minY.isFinite else { return }
         let bounds = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
         center = bounded(CGPoint(x: bounds.midX, y: bounds.midY))
@@ -133,12 +154,12 @@ struct MapCanvasView: View {
 
     private func drawMap(context: inout GraphicsContext, transform: MapTransform, size: CGSize) {
         let screen = CGRect(origin: .zero, size: size)
-        context.fill(Path(screen), with: .color(Color(red: 0.97, green: 0.98, blue: 1)))
+        context.fill(Path(screen), with: .color(Color(uiColor: .systemBackground)))
         drawGrid(context: &context, transform: transform)
         for node in snapshot.logicalNodes { drawNode(node, context: &context, transform: transform) }
-        for line in snapshot.lines { drawLine(line, context: &context, transform: transform) }
+        for line in snapshot.lines where line.code != interaction.hiddenLineCode { drawLine(line, context: &context, transform: transform) }
         if showCrosses {
-            for cross in snapshot.crosses where valid(cross) {
+            for cross in snapshot.crosses where valid(cross) && interaction.includes(cross) {
                 drawCross(cross, context: &context, transform: transform)
             }
         }
@@ -152,6 +173,7 @@ struct MapCanvasView: View {
             }
             for node in nodes { drawLabel(node, context: &context, transform: transform, occupied: &occupied) }
         }
+        drawEditing(context: &context, transform: transform)
     }
 
     private func drawGrid(context: inout GraphicsContext, transform: MapTransform) {
@@ -174,13 +196,13 @@ struct MapCanvasView: View {
             path.addLine(to: transform.screen(CGPoint(x: right, y: y)))
             y += step
         }
-        context.stroke(path, with: .color(Color(red: 0.84, green: 0.88, blue: 0.94)), lineWidth: 0.6)
+        context.stroke(path, with: .color(.primary.opacity(0.12)), lineWidth: 0.6)
     }
 
     private func drawLine(_ line: MapLine, context: inout GraphicsContext, transform: MapTransform) {
         guard line.nodes.count >= 2 else { return }
         let chosen = selectedID == MapSelection.line(line).id
-        let color = chosen ? Color.orange : Color(red: 0.20, green: 0.46, blue: 0.78)
+        let color = chosen ? Color.orange : line.isLocked ? Color.green : Color(red: 0.20, green: 0.46, blue: 0.78)
         let clip = CGRect(origin: .zero, size: transform.size).insetBy(dx: -20, dy: -20)
         var path = Path()
         for index in 1..<line.nodes.count {
@@ -208,6 +230,10 @@ struct MapCanvasView: View {
                 let location = CGPoint(x: visible.0.x + (visible.1.x - visible.0.x) * fraction,
                                        y: visible.0.y + (visible.1.y - visible.0.y) * fraction)
                 guard clip.contains(location) else { continue }
+                if interaction.showSpeeds && index == 0 {
+                    context.draw(Text("\(line.properties.speed)").font(.system(size: 10)).foregroundColor(color),
+                                 at: CGPoint(x: location.x + 10, y: location.y - 12))
+                }
                 if line.properties.passInOpposeDirection == 1 {
                     drawArrow(at: CGPoint(x: location.x - direction.dy * 3, y: location.y + direction.dx * 3), direction: direction, color: color, context: &context)
                     drawArrow(at: CGPoint(x: location.x + direction.dy * 3, y: location.y - direction.dx * 3), direction: CGVector(dx: -direction.dx, dy: -direction.dy), color: color, context: &context)
@@ -231,6 +257,11 @@ struct MapCanvasView: View {
         let rect = nodeRect(node, transform: transform)
         guard rect.insetBy(dx: -4, dy: -4).intersects(CGRect(origin: .zero, size: transform.size)) else { return }
         let color = nodeColor(node.sideLength)
+        if interaction.showProtection {
+            let side = CGFloat(node.sideLength * 3 - 1) * transform.scale
+            let protection = CGRect(x: rect.midX - side / 2, y: rect.midY - side / 2, width: side, height: side)
+            context.stroke(Path(protection), with: .color(color.opacity(0.45)), style: StrokeStyle(lineWidth: 0.7, dash: [4, 3]))
+        }
         let path = nodePath(rect: rect, size: node.sideLength, cut: min(rect.width / 2, 0.5 * transform.scale))
         context.fill(path, with: .color(color.opacity(0.09)))
         context.stroke(path, with: .color(color), lineWidth: selectedID == MapSelection.logicalNode(node).id ? 3 : 1.5)
@@ -312,17 +343,18 @@ struct MapCanvasView: View {
     }
 
     private func hitTest(_ point: CGPoint, transform: MapTransform) -> MapSelection? {
-        if showCrosses {
-            let crosses = snapshot.crosses.filter(valid).map { cross in
+        if showCrosses && (interaction.tool == .browse || interaction.tool == .cross) {
+            let crosses = snapshot.crosses.filter { valid($0) && interaction.includes($0) }.map { cross in
                 (cross, distance(point, transform.screen(CGPoint(x: CGFloat(cross.x), y: CGFloat(cross.y)))))
             }
             if let nearest = crosses.filter({ $0.1 <= 14 }).min(by: { $0.1 < $1.1 }) { return .cross(nearest.0) }
         }
         let nodes = snapshot.logicalNodes.filter { $0.x.isFinite && $0.y.isFinite }
             .filter { nodeRect($0, transform: transform).insetBy(dx: -8, dy: -8).contains(point) }
-        if let node = nodes.min(by: {
+        if (interaction.tool == .browse || interaction.tool == .node), let node = nodes.min(by: {
             distance(point, transform.screen(CGPoint(x: CGFloat($0.x), y: CGFloat($0.y)))) < distance(point, transform.screen(CGPoint(x: CGFloat($1.x), y: CGFloat($1.y))))
         }) { return .logicalNode(node) }
+        guard interaction.tool == .browse || interaction.tool == .line else { return nil }
         var nearest: MapLine?
         var nearestDistance: CGFloat = 10
         for line in snapshot.lines where line.nodes.count >= 2 {
@@ -360,6 +392,57 @@ struct MapCanvasView: View {
         let position = cross.key.position
         return position.x2 >= 0 && position.x2 <= 1_000_000 && position.y2 >= 0 && position.y2 <= 1_000_000 &&
             position.x2 % 2 == 0 && position.y2 % 2 == 0 && (-1...3).contains(cross.state)
+    }
+
+    private func drawEditing(context: inout GraphicsContext, transform: MapTransform) {
+        if !interaction.continuation.isEmpty {
+            var route = Path()
+            for (index, point) in interaction.continuation.enumerated() {
+                let p = transform.screen(CGPoint(x: point.x, y: point.y))
+                if index == 0 { route.move(to: p) } else { route.addLine(to: p) }
+            }
+            context.stroke(route, with: .color(.cyan), style: StrokeStyle(lineWidth: 3, dash: [7, 4]))
+        }
+        if let preview = interaction.preview {
+            for node in preview.logicalNodes { drawNode(node, context: &context, transform: transform) }
+            for line in preview.lines { drawLine(line, context: &context, transform: transform) }
+            for cross in preview.crosses { drawCross(cross, context: &context, transform: transform) }
+        }
+        if let region = interaction.region {
+            let topLeft = transform.screen(CGPoint(x: region.left, y: region.top))
+            let bottomRight = transform.screen(CGPoint(x: region.right, y: region.bottom))
+            let rect = CGRect(x: topLeft.x, y: topLeft.y, width: bottomRight.x - topLeft.x, height: bottomRight.y - topLeft.y)
+            context.fill(Path(rect), with: .color(.orange.opacity(0.08)))
+            context.stroke(Path(rect), with: .color(.orange), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+        }
+        if !interaction.draftPoints.isEmpty {
+            var path = Path()
+            for (index, point) in interaction.draftPoints.enumerated() {
+                let p = transform.screen(CGPoint(x: point.x, y: point.y))
+                if index == 0 { path.move(to: p) } else { path.addLine(to: p) }
+                let selected = index == interaction.selectedPoint
+                context.fill(Path(ellipseIn: CGRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8)),
+                             with: .color(selected ? .red : .orange))
+                context.draw(Text("\(index + 1)").font(.system(size: 10)).foregroundColor(.orange),
+                             at: CGPoint(x: p.x + 10, y: p.y - 12))
+            }
+            context.stroke(path, with: .color(.orange), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+        }
+        if let anchor = interaction.draftAnchor, interaction.showCursor {
+            let snapped = MapLineDraft.snap(target: interaction.cursor, from: anchor)
+            let a = transform.screen(anchor), b = transform.screen(snapped)
+            var segment = Path(); segment.move(to: a); segment.addLine(to: b)
+            context.stroke(segment, with: .color(.orange), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+            context.stroke(Path(ellipseIn: CGRect(x: b.x - 5, y: b.y - 5, width: 10, height: 10)), with: .color(.orange), lineWidth: 2)
+        }
+        if interaction.showCursor {
+            let p = CGPoint(x: transform.size.width / 2, y: transform.size.height / 2)
+            var crosshair = Path()
+            crosshair.move(to: CGPoint(x: p.x - 16, y: p.y)); crosshair.addLine(to: CGPoint(x: p.x + 16, y: p.y))
+            crosshair.move(to: CGPoint(x: p.x, y: p.y - 16)); crosshair.addLine(to: CGPoint(x: p.x, y: p.y + 16))
+            context.stroke(crosshair, with: .color(.white), lineWidth: 4)
+            context.stroke(crosshair, with: .color(.red), lineWidth: 1)
+        }
     }
 
     private func nodeRect(_ node: MapLogicalNode, transform: MapTransform) -> CGRect {

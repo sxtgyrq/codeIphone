@@ -1,6 +1,8 @@
 """Generate a dependency-free Xcode project on Windows or macOS (Python 3)."""
 from pathlib import Path
 import hashlib
+import os
+from datetime import datetime, timezone, timedelta
 import json
 import plistlib
 import xml.etree.ElementTree as ET
@@ -74,11 +76,19 @@ def emit(value, depth=0):
 
 def main():
     objects.clear()
+    release_date = os.environ.get("RELEASE_DATE") or datetime.now(timezone(timedelta(hours=8))).strftime("%Y.%m.%d")
+    datetime.strptime(release_date, "%Y.%m.%d")
     app_sources, app_builds = swift_sources(NAME, "app")
     unit_sources, unit_builds = swift_sources(NAME + "Tests", "unit")
     test_sources, test_builds = swift_sources(NAME + "UITests", "test")
     app_info = file("app/info", "Info.plist", "text.plist.xml")
     app_assets = file("app/assets", "Assets.xcassets", "folder.assetcatalog")
+    extra_resources = []
+    guide_refs = []
+    if (ROOT / NAME / "FlowDiagramLanguage.md").exists():
+        guide = file("app/flow-guide", "FlowDiagramLanguage.md", "net.daringfireball.markdown")
+        guide_refs.append(guide)
+        extra_resources.append(buildfile("app/build-flow-guide", guide))
     product = obj("app/product", "PBXFileReference", explicitFileType="wrapper.application",
                   includeInIndex="0", path=NAME + ".app", sourceTree="BUILT_PRODUCTS_DIR")
     test_product = obj("test/product", "PBXFileReference", explicitFileType="wrapper.cfbundle",
@@ -86,7 +96,7 @@ def main():
     unit_product = obj("unit/product", "PBXFileReference", explicitFileType="wrapper.cfbundle",
                        includeInIndex="0", path=NAME + "Tests.xctest", sourceTree="BUILT_PRODUCTS_DIR")
     products = obj("products", "PBXGroup", children=[product, unit_product, test_product], name="Products", sourceTree="<group>")
-    app_group = obj("app/group", "PBXGroup", children=[*app_sources, app_info, app_assets], path=NAME, sourceTree="<group>")
+    app_group = obj("app/group", "PBXGroup", children=[*app_sources, app_info, app_assets, *guide_refs], path=NAME, sourceTree="<group>")
     unit_group = obj("unit/group", "PBXGroup", children=unit_sources, path=NAME + "Tests", sourceTree="<group>")
     test_group = obj("test/group", "PBXGroup", children=test_sources, path=NAME + "UITests", sourceTree="<group>")
     root_group = obj("main/group", "PBXGroup", children=[app_group, unit_group, test_group, products], sourceTree="<group>")
@@ -99,12 +109,12 @@ def main():
                   SWIFT_EMIT_LOC_STRINGS="YES")
     app_settings = dict(common, PRODUCT_BUNDLE_IDENTIFIER="com.yaoruiqing.helloyrq",
                         INFOPLIST_FILE=NAME + "/Info.plist", ASSETCATALOG_COMPILER_APPICON_NAME="AppIcon",
-                        GENERATE_INFOPLIST_FILE="NO", CURRENT_PROJECT_VERSION="1", MARKETING_VERSION="1.0",
+                        GENERATE_INFOPLIST_FILE="NO", CURRENT_PROJECT_VERSION="1", MARKETING_VERSION=release_date,
                         LD_RUNPATH_SEARCH_PATHS=["$(inherited)", "@executable_path/Frameworks"])
     app_target = obj("app/target", "PBXNativeTarget", buildConfigurationList=configs("app", app_settings),
                      buildPhases=[phase("app/sources", "PBXSourcesBuildPhase", app_builds),
                                   phase("app/frameworks", "PBXFrameworksBuildPhase"),
-                                  phase("app/resources", "PBXResourcesBuildPhase", [buildfile("app/build-assets", app_assets)])],
+                                  phase("app/resources", "PBXResourcesBuildPhase", [buildfile("app/build-assets", app_assets), *extra_resources])],
                      buildRules=[], dependencies=[], name=NAME, productName=NAME,
                      productReference=product, productType="com.apple.product-type.application")
     project_id = oid("project/root")
@@ -182,8 +192,9 @@ def main():
                       "CFBundleExecutable": "$(EXECUTABLE_NAME)", "CFBundleIdentifier": "$(PRODUCT_BUNDLE_IDENTIFIER)",
                       "CFBundleInfoDictionaryVersion": "6.0", "CFBundleName": "$(PRODUCT_NAME)", "CFBundlePackageType": "APPL",
                       "CFBundleShortVersionString": "$(MARKETING_VERSION)", "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
+                      "ArgumentMapReleaseDate": release_date,
                       "LSRequiresIPhoneOS": True, "UILaunchScreen": {},
-                      "NSLocalNetworkUsageDescription": "连接同一局域网中的 ArgumentMap Server，登录并查看逻辑地图。",
+                      "NSLocalNetworkUsageDescription": "连接同一局域网中的 ArgumentMap Server，登录、查看与编辑逻辑地图。",
                       # Apple supports IP/CIDR ATS exceptions on iOS 17+. iOS 16
                       # permits local IP loads; keep global internet ATS intact.
                       # https://developer.apple.com/documentation/bundleresources/information-property-list/nsapptransportsecurity/nsexceptiondomains
